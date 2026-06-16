@@ -1,0 +1,130 @@
+package com.kitsune.app
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.kitsune.app.core.StorageHelper
+import com.kitsune.app.data.repository.SettingsRepository
+import com.kitsune.app.database.AppDatabase
+import com.kitsune.app.navigation.Screen
+import com.kitsune.app.ui.bookmark.BookmarkScreen
+import com.kitsune.app.ui.local.LocalScreen
+import com.kitsune.app.ui.playlist.PlaylistScreen
+import com.kitsune.app.ui.settings.OtherScreen
+import com.kitsune.app.ui.splash.SplashScreen
+import com.kitsune.app.ui.splash.SplashViewModel
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Manual DI for Phase 1
+        val database = AppDatabase.getDatabase(this)
+        val settingsRepository = SettingsRepository(database.settingsDao())
+        val storageHelper = StorageHelper(this)
+        val splashViewModel = SplashViewModel(settingsRepository, storageHelper)
+
+        enableEdgeToEdge()
+        setContent {
+            KitsuneTheme {
+                val navController = rememberNavController()
+                
+                NavHost(navController = navController, startDestination = Screen.Splash.route) {
+                    composable(Screen.Splash.route) {
+                        SplashScreen(
+                            viewModel = splashViewModel,
+                            storageHelper = storageHelper,
+                            onNavigateToMain = {
+                                navController.navigate(Screen.Main.route) {
+                                    popUpTo(Screen.Splash.route) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+                    composable(Screen.Main.route) {
+                        MainContainer()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MainContainer() {
+    val navController = rememberNavController()
+    val items = listOf(
+        BottomNavItem("Bookmark", Screen.Bookmark.route, Icons.Default.Star),
+        BottomNavItem("Playlist", Screen.Playlist.route, Icons.AutoMirrored.Filled.List),
+        BottomNavItem("Local", Screen.Local.route, Icons.Default.Home),
+        BottomNavItem("Other", Screen.Other.route, Icons.Default.Settings),
+    )
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntry?.destination
+                items.forEach { item ->
+                    NavigationBarItem(
+                        icon = { Icon(item.icon, contentDescription = item.label) },
+                        label = { Text(item.label) },
+                        selected = currentDestination?.hierarchy?.any { it.route == item.route } == true,
+                        onClick = {
+                            navController.navigate(item.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Local.route,
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable(Screen.Bookmark.route) { BookmarkScreen() }
+            composable(Screen.Playlist.route) { PlaylistScreen() }
+            composable(Screen.Local.route) { LocalScreen() }
+            composable(Screen.Other.route) { OtherScreen() }
+        }
+    }
+}
+
+data class BottomNavItem(val label: String, val route: String, val icon: ImageVector)
+
+@Composable
+fun KitsuneTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = Color(0xFFFF9800), // Orange Accent
+            background = Color.Black,
+            surface = Color(0xFF121212)
+        ),
+        content = content
+    )
+}
