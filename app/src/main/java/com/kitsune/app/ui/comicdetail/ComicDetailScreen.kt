@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -13,8 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.domain.model.Chapter
 import com.kitsune.app.domain.model.Comic
 
@@ -23,6 +26,7 @@ import com.kitsune.app.domain.model.Comic
 fun ComicDetailScreen(
     viewModel: ComicDetailViewModel,
     onChapterClick: (Chapter) -> Unit,
+    onContinueClick: (ReadingProgressEntity) -> Unit,
     onBackClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -59,7 +63,9 @@ fun ComicDetailScreen(
                     ComicDetailContent(
                         comic = state.comic,
                         chapters = state.chapters,
-                        onChapterClick = onChapterClick
+                        progress = state.progress,
+                        onChapterClick = onChapterClick,
+                        onContinueClick = onContinueClick
                     )
                 }
             }
@@ -71,7 +77,9 @@ fun ComicDetailScreen(
 fun ComicDetailContent(
     comic: Comic,
     chapters: List<Chapter>,
-    onChapterClick: (Chapter) -> Unit
+    progress: ReadingProgressEntity?,
+    onChapterClick: (Chapter) -> Unit,
+    onContinueClick: (ReadingProgressEntity) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -79,6 +87,12 @@ fun ComicDetailContent(
     ) {
         item {
             ComicHeader(comic = comic)
+            
+            if (progress != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                ContinueReadingCard(progress = progress, onClick = { onContinueClick(progress) })
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "Chapters (${chapters.size})",
@@ -131,9 +145,10 @@ fun ComicHeader(comic: Comic) {
             Text(
                 text = comic.title,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
-            // Metadata placeholder (Future: Author, Genre, Status)
             Text(
                 text = "Local Library",
                 style = MaterialTheme.typography.bodyMedium,
@@ -142,8 +157,57 @@ fun ComicHeader(comic: Comic) {
             Text(
                 text = comic.relativePath,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+@Composable
+fun ContinueReadingCard(
+    progress: ReadingProgressEntity,
+    onClick: () -> Unit
+) {
+    ElevatedCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "Continue Reading",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = progress.chapterRelativePath.substringAfterLast('/'),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Page ${progress.pageNumber} of ${progress.totalPages}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                )
+            }
         }
     }
 }
@@ -156,7 +220,7 @@ fun ChapterItem(
     ListItem(
         headlineContent = { Text(chapter.name) },
         supportingContent = { Text("CBZ File") },
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
     )
 }

@@ -27,9 +27,11 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.kitsune.app.core.StorageHelper
 import com.kitsune.app.data.repository.ReaderRepository
+import com.kitsune.app.data.repository.ReadingProgressRepository
 import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
 import com.kitsune.app.database.AppDatabase
+import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.navigation.Screen
 import com.kitsune.app.reader.CbzImageFetcher
 import com.kitsune.app.reader.CbzParser
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
         val storageHelper = StorageHelper(this)
         val comicScanner = ComicScanner(this)
         val scannerRepository = ScannerRepository(comicScanner, database.comicDao())
+        val progressRepository = ReadingProgressRepository(database.readingProgressDao())
         
         val cbzParser = CbzParser(this)
         readerRepository = ReaderRepository(cbzParser)
@@ -90,6 +93,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
                             scannerRepository = scannerRepository,
                             settingsRepository = settingsRepository,
                             readerRepository = readerRepository,
+                            progressRepository = progressRepository,
                             storageHelper = storageHelper
                         )
                     }
@@ -101,7 +105,6 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .components {
-                // Gunakan context dari Activity atau Application
                 add(CbzImageFetcher.Factory(applicationContext, readerRepository))
             }
             .build()
@@ -114,6 +117,7 @@ fun MainContainer(
     scannerRepository: ScannerRepository,
     settingsRepository: SettingsRepository,
     readerRepository: ReaderRepository,
+    progressRepository: ReadingProgressRepository,
     storageHelper: StorageHelper
 ) {
     val navController = rememberNavController()
@@ -187,12 +191,16 @@ fun MainContainer(
                 val viewModel = ComicDetailViewModel(
                     comicRelativePath = comicRelativePath,
                     scannerRepository = scannerRepository,
-                    settingsRepository = settingsRepository
+                    settingsRepository = settingsRepository,
+                    progressRepository = progressRepository
                 )
                 ComicDetailScreen(
                     viewModel = viewModel,
                     onChapterClick = { chapter ->
                         navController.navigate(Screen.Reader.createRoute(comicRelativePath, chapter.relativePath))
+                    },
+                    onContinueClick = { progress: ReadingProgressEntity ->
+                        navController.navigate(Screen.Reader.createRoute(comicRelativePath, progress.chapterRelativePath))
                     },
                     onBackClick = { navController.popBackStack() }
                 )
@@ -213,6 +221,7 @@ fun MainContainer(
                     chapterRelativePath = chapterRelativePath,
                     readerRepository = readerRepository,
                     settingsRepository = settingsRepository,
+                    progressRepository = progressRepository,
                     storageHelper = storageHelper
                 )
                 

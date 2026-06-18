@@ -3,8 +3,10 @@ package com.kitsune.app.ui.comicdetail
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kitsune.app.data.repository.ReadingProgressRepository
 import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
+import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.domain.model.Chapter
 import com.kitsune.app.domain.model.Comic
 import kotlinx.coroutines.flow.*
@@ -12,12 +14,13 @@ import kotlinx.coroutines.launch
 
 /**
  * ViewModel untuk mengelola data detail sebuah komik.
- * Memuat metadata komik dan daftar chapter secara lazy.
+ * Memuat metadata komik, daftar chapter, dan progres membaca secara lazy.
  */
 class ComicDetailViewModel(
     private val comicRelativePath: String,
     private val scannerRepository: ScannerRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val progressRepository: ReadingProgressRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ComicDetailUiState>(ComicDetailUiState.Loading)
@@ -49,10 +52,14 @@ class ComicDetailViewModel(
                 // 3. Scan chapter di dalam folder komik (Lazy Loading)
                 val chapters = scannerRepository.getChapters(rootUriString.toUri(), comicRelativePath)
 
-                _uiState.value = ComicDetailUiState.Success(
-                    comic = comic,
-                    chapters = chapters
-                )
+                // 4. Ambil progres membaca terbaru secara real-time
+                progressRepository.getProgressByComic(comicRelativePath).collect { progress ->
+                    _uiState.value = ComicDetailUiState.Success(
+                        comic = comic,
+                        chapters = chapters,
+                        progress = progress
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.value = ComicDetailUiState.Error("Failed to load details: ${e.message}")
             }
@@ -65,6 +72,10 @@ class ComicDetailViewModel(
  */
 sealed class ComicDetailUiState {
     data object Loading : ComicDetailUiState()
-    data class Success(val comic: Comic, val chapters: List<Chapter>) : ComicDetailUiState()
+    data class Success(
+        val comic: Comic,
+        val chapters: List<Chapter>,
+        val progress: ReadingProgressEntity?
+    ) : ComicDetailUiState()
     data class Error(val message: String) : ComicDetailUiState()
 }

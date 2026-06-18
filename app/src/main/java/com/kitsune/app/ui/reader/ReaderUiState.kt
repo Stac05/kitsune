@@ -9,7 +9,8 @@ sealed class ReaderUiState {
     data object Loading : ReaderUiState()
     data class Success(
         val pages: List<Page>,
-        val chapterName: String
+        val chapterName: String,
+        val readingMode: String = "Vertical"
     ) : ReaderUiState()
     data class Error(val message: String) : ReaderUiState()
     data object Empty : ReaderUiState()
