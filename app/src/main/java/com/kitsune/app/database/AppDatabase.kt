@@ -4,12 +4,15 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.kitsune.app.database.dao.ComicDao
 import com.kitsune.app.database.dao.SettingsDao
+import com.kitsune.app.database.entity.ComicEntity
 import com.kitsune.app.database.entity.SettingsEntity
 
-@Database(entities = [SettingsEntity::class], version = 1, exportSchema = false)
+@Database(entities = [SettingsEntity::class, ComicEntity::class], version = 1, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun settingsDao(): SettingsDao
+    abstract fun comicDao(): ComicDao
 
     companion object {
         @Volatile

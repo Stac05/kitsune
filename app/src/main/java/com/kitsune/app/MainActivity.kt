@@ -22,10 +22,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.kitsune.app.core.StorageHelper
+import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
 import com.kitsune.app.database.AppDatabase
 import com.kitsune.app.navigation.Screen
+import com.kitsune.app.scanner.ComicScanner
 import com.kitsune.app.ui.bookmark.BookmarkScreen
+import com.kitsune.app.ui.library.ComicLibraryScreen
+import com.kitsune.app.ui.library.LibraryViewModel
 import com.kitsune.app.ui.local.LocalScreen
 import com.kitsune.app.ui.playlist.PlaylistScreen
 import com.kitsune.app.ui.settings.OtherScreen
@@ -36,11 +40,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Manual DI for Phase 1
+        // Manual DI for Phase 2.4
         val database = AppDatabase.getDatabase(this)
         val settingsRepository = SettingsRepository(database.settingsDao())
         val storageHelper = StorageHelper(this)
+        val comicScanner = ComicScanner(this)
+        val scannerRepository = ScannerRepository(comicScanner, database.comicDao())
+        
         val splashViewModel = SplashViewModel(settingsRepository, storageHelper)
+        val libraryViewModel = LibraryViewModel(scannerRepository, settingsRepository)
 
         enableEdgeToEdge()
         setContent {
@@ -60,7 +68,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable(Screen.Main.route) {
-                        MainContainer()
+                        MainContainer(libraryViewModel)
                     }
                 }
             }
@@ -69,7 +77,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainContainer() {
+fun MainContainer(libraryViewModel: LibraryViewModel) {
     val navController = rememberNavController()
     val items = listOf(
         BottomNavItem("Bookmark", Screen.Bookmark.route, Icons.Default.Star),
@@ -80,24 +88,31 @@ fun MainContainer() {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
-                items.forEach { item ->
-                    NavigationBarItem(
-                        icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label) },
-                        selected = currentDestination?.hierarchy?.any { it.route == item.route } == true,
-                        onClick = {
-                            navController.navigate(item.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+            val navBackStackEntry by navController.currentBackStackEntryAsState()
+            val currentDestination = navBackStackEntry?.destination
+            
+            // Only show bottom bar on root destinations
+            val rootRoutes = items.map { it.route }
+            val showBottomBar = currentDestination?.route in rootRoutes
+
+            if (showBottomBar) {
+                NavigationBar {
+                    items.forEach { item ->
+                        NavigationBarItem(
+                            icon = { Icon(item.icon, contentDescription = item.label) },
+                            label = { Text(item.label) },
+                            selected = currentDestination?.hierarchy?.any { it.route == item.route } == true,
+                            onClick = {
+                                navController.navigate(item.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -109,8 +124,23 @@ fun MainContainer() {
         ) {
             composable(Screen.Bookmark.route) { BookmarkScreen() }
             composable(Screen.Playlist.route) { PlaylistScreen() }
-            composable(Screen.Local.route) { LocalScreen() }
+            composable(Screen.Local.route) { 
+                LocalScreen(
+                    onComicsClick = { navController.navigate(Screen.ComicLibrary.route) },
+                    onVideosClick = { /* Future */ }
+                ) 
+            }
             composable(Screen.Other.route) { OtherScreen() }
+            
+            composable(Screen.ComicLibrary.route) {
+                ComicLibraryScreen(
+                    viewModel = libraryViewModel,
+                    onComicClick = { comic ->
+                        // Future: Navigate to detail
+                    },
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
         }
     }
 }
