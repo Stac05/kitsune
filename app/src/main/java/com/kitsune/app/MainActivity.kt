@@ -216,14 +216,17 @@ fun MainContainer(
                 val comicRelativePath = backStackEntry.arguments?.getString("comicRelativePath") ?: ""
                 val chapterRelativePath = backStackEntry.arguments?.getString("chapterRelativePath") ?: ""
                 
-                val viewModel = ReaderViewModel(
-                    comicRelativePath = comicRelativePath,
-                    chapterRelativePath = chapterRelativePath,
-                    readerRepository = readerRepository,
-                    settingsRepository = settingsRepository,
-                    progressRepository = progressRepository,
-                    storageHelper = storageHelper
-                )
+                val viewModel = remember {
+                    ReaderViewModel(
+                        comicRelativePath = comicRelativePath,
+                        currentChapterPath = chapterRelativePath,
+                        readerRepository = readerRepository,
+                        settingsRepository = settingsRepository,
+                        progressRepository = progressRepository,
+                        scannerRepository = scannerRepository,
+                        storageHelper = storageHelper
+                    )
+                }
                 
                 ReaderScreen(
                     viewModel = viewModel,
