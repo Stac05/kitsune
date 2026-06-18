@@ -23,11 +23,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.kitsune.app.core.StorageHelper
+import com.kitsune.app.data.repository.ReaderRepository
 import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
 import com.kitsune.app.database.AppDatabase
 import com.kitsune.app.navigation.Screen
+import com.kitsune.app.reader.CbzImageFetcher
+import com.kitsune.app.reader.CbzParser
 import com.kitsune.app.scanner.ComicScanner
 import com.kitsune.app.ui.bookmark.BookmarkScreen
 import com.kitsune.app.ui.comicdetail.ComicDetailScreen
@@ -36,20 +41,28 @@ import com.kitsune.app.ui.library.ComicLibraryScreen
 import com.kitsune.app.ui.library.LibraryViewModel
 import com.kitsune.app.ui.local.LocalScreen
 import com.kitsune.app.ui.playlist.PlaylistScreen
+import com.kitsune.app.ui.reader.ReaderScreen
+import com.kitsune.app.ui.reader.ReaderViewModel
 import com.kitsune.app.ui.settings.OtherScreen
 import com.kitsune.app.ui.splash.SplashScreen
 import com.kitsune.app.ui.splash.SplashViewModel
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), ImageLoaderFactory {
+
+    private lateinit var readerRepository: ReaderRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Manual DI for Phase 3.1
+        // Manual DI
         val database = AppDatabase.getDatabase(this)
         val settingsRepository = SettingsRepository(database.settingsDao())
         val storageHelper = StorageHelper(this)
         val comicScanner = ComicScanner(this)
         val scannerRepository = ScannerRepository(comicScanner, database.comicDao())
+        
+        val cbzParser = CbzParser(this)
+        readerRepository = ReaderRepository(cbzParser)
         
         val splashViewModel = SplashViewModel(settingsRepository, storageHelper)
         val libraryViewModel = LibraryViewModel(scannerRepository, settingsRepository)
@@ -75,12 +88,23 @@ class MainActivity : ComponentActivity() {
                         MainContainer(
                             libraryViewModel = libraryViewModel,
                             scannerRepository = scannerRepository,
-                            settingsRepository = settingsRepository
+                            settingsRepository = settingsRepository,
+                            readerRepository = readerRepository,
+                            storageHelper = storageHelper
                         )
                     }
                 }
             }
         }
+    }
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .components {
+                // Gunakan context dari Activity atau Application
+                add(CbzImageFetcher.Factory(applicationContext, readerRepository))
+            }
+            .build()
     }
 }
 
@@ -88,7 +112,9 @@ class MainActivity : ComponentActivity() {
 fun MainContainer(
     libraryViewModel: LibraryViewModel,
     scannerRepository: ScannerRepository,
-    settingsRepository: SettingsRepository
+    settingsRepository: SettingsRepository,
+    readerRepository: ReaderRepository,
+    storageHelper: StorageHelper
 ) {
     val navController = rememberNavController()
     val items = listOf(
@@ -166,8 +192,32 @@ fun MainContainer(
                 ComicDetailScreen(
                     viewModel = viewModel,
                     onChapterClick = { chapter ->
-                        // Future: Navigate to reader
+                        navController.navigate(Screen.Reader.createRoute(comicRelativePath, chapter.relativePath))
                     },
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Screen.Reader.route,
+                arguments = listOf(
+                    navArgument("comicRelativePath") { type = NavType.StringType },
+                    navArgument("chapterRelativePath") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val comicRelativePath = backStackEntry.arguments?.getString("comicRelativePath") ?: ""
+                val chapterRelativePath = backStackEntry.arguments?.getString("chapterRelativePath") ?: ""
+                
+                val viewModel = ReaderViewModel(
+                    comicRelativePath = comicRelativePath,
+                    chapterRelativePath = chapterRelativePath,
+                    readerRepository = readerRepository,
+                    settingsRepository = settingsRepository,
+                    storageHelper = storageHelper
+                )
+                
+                ReaderScreen(
+                    viewModel = viewModel,
                     onBackClick = { navController.popBackStack() }
                 )
             }

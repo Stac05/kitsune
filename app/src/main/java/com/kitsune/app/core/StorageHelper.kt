@@ -52,4 +52,18 @@ class StorageHelper(private val context: Context) {
             false
         }
     }
+
+    /**
+     * Menelusuri DocumentFile berdasarkan jalur relatif.
+     */
+    fun findFileByRelativePath(rootUri: Uri, relativePath: String): DocumentFile? {
+        val rootDoc = DocumentFile.fromTreeUri(context, rootUri) ?: return null
+        var current: DocumentFile? = rootDoc
+        val parts = relativePath.split("/").filter { it.isNotEmpty() }
+        for (part in parts) {
+            current = current?.findFile(part)
+            if (current == null) break
+        }
+        return current
+    }
 }

@@ -22,4 +22,10 @@ sealed class Screen(val route: String) {
             return "comic_detail/${Uri.encode(comicRelativePath)}"
         }
     }
+
+    object Reader : Screen("reader/{comicRelativePath}/{chapterRelativePath}") {
+        fun createRoute(comicRelativePath: String, chapterRelativePath: String): String {
+            return "reader/${Uri.encode(comicRelativePath)}/${Uri.encode(chapterRelativePath)}"
+        }
+    }
 }
