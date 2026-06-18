@@ -11,16 +11,8 @@
 .DS_Store
 /build
 /captures
+/docs
 .externalNativeBuild
 .cxx
 local.properties
 
-# AI Documentation
-docs/
-AI_AGENT_CONTEXT.md
-
-# AI Tools
-.cursor/
-.claude/
-.roo/
-.ai/

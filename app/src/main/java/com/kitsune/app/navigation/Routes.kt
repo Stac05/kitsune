@@ -1,5 +1,7 @@
 package com.kitsune.app.navigation
 
+import android.net.Uri
+
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Main : Screen("main") // Container for bottom nav screens
@@ -16,6 +18,8 @@ sealed class Screen(val route: String) {
 
     // Detail Screens
     object ComicDetail : Screen("comic_detail/{comicRelativePath}") {
-        fun createRoute(comicRelativePath: String) = "comic_detail/$comicRelativePath"
+        fun createRoute(comicRelativePath: String): String {
+            return "comic_detail/${Uri.encode(comicRelativePath)}"
+        }
     }
 }

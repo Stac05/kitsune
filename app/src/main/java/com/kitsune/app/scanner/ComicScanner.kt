@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.kitsune.app.core.NaturalOrderComparator
+import com.kitsune.app.domain.model.Chapter
 import com.kitsune.app.domain.model.Comic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,8 +20,7 @@ class ComicScanner(private val context: Context) {
 
     /**
      * Memindai folder 'Comics' di dalam root URI yang diberikan.
-     * Menggunakan callback [getExistingCover] untuk mendukung incremental scan:
-     * Jika lastModified folder sama dengan cache, scanner bisa melewati pencarian cover fisik.
+     * Menggunakan callback [getExistingCover] untuk mendukung incremental scan.
      */
     suspend fun scanComics(
         rootUri: Uri,
@@ -42,9 +42,7 @@ class ComicScanner(private val context: Context) {
             val relativePath = "Comics/$title"
             val currentLastModified = folder.lastModified()
             
-            // Cek apakah ada cover di cache yang masih valid
             val cachedCover = getExistingCover(relativePath, currentLastModified)
-            
             val coverUri = cachedCover ?: findCover(folder)?.toString()
             
             Comic(
@@ -54,6 +52,39 @@ class ComicScanner(private val context: Context) {
                 lastModified = currentLastModified
             )
         }
+    }
+
+    /**
+     * Memindai daftar chapter (file .cbz) di dalam folder komik tertentu.
+     */
+    suspend fun scanChapters(rootUri: Uri, comicRelativePath: String): List<Chapter> = withContext(Dispatchers.IO) {
+        val rootDoc = DocumentFile.fromTreeUri(context, rootUri) ?: return@withContext emptyList()
+        
+        // Navigasi ke folder komik berdasarkan relative path (misal: Comics/One Piece)
+        val comicFolder = navigateToRelativePath(rootDoc, comicRelativePath) 
+            ?: return@withContext emptyList()
+
+        comicFolder.listFiles()
+            .filter { it.isFile && it.name?.lowercase()?.endsWith(".cbz") == true }
+            .sortedWith { f1, f2 -> 
+                naturalOrderComparator.compare(f1.name ?: "", f2.name ?: "") 
+            }
+            .map { file ->
+                val name = file.name ?: "Unknown Chapter"
+                Chapter(
+                    name = name.removeSuffix(".cbz"),
+                    relativePath = "$comicRelativePath/$name",
+                    lastModified = file.lastModified()
+                )
+            }
+    }
+
+    private fun navigateToRelativePath(root: DocumentFile, relativePath: String): DocumentFile? {
+        var current: DocumentFile? = root
+        relativePath.split("/").forEach { part ->
+            current = current?.findFile(part)
+        }
+        return current
     }
 
     private fun findCover(folder: DocumentFile): Uri? {

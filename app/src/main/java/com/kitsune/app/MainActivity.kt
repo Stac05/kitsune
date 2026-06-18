@@ -17,10 +17,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.kitsune.app.core.StorageHelper
 import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
@@ -28,6 +30,8 @@ import com.kitsune.app.database.AppDatabase
 import com.kitsune.app.navigation.Screen
 import com.kitsune.app.scanner.ComicScanner
 import com.kitsune.app.ui.bookmark.BookmarkScreen
+import com.kitsune.app.ui.comicdetail.ComicDetailScreen
+import com.kitsune.app.ui.comicdetail.ComicDetailViewModel
 import com.kitsune.app.ui.library.ComicLibraryScreen
 import com.kitsune.app.ui.library.LibraryViewModel
 import com.kitsune.app.ui.local.LocalScreen
@@ -40,7 +44,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Manual DI for Phase 2.4
+        // Manual DI for Phase 3.1
         val database = AppDatabase.getDatabase(this)
         val settingsRepository = SettingsRepository(database.settingsDao())
         val storageHelper = StorageHelper(this)
@@ -68,7 +72,11 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable(Screen.Main.route) {
-                        MainContainer(libraryViewModel)
+                        MainContainer(
+                            libraryViewModel = libraryViewModel,
+                            scannerRepository = scannerRepository,
+                            settingsRepository = settingsRepository
+                        )
                     }
                 }
             }
@@ -77,7 +85,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainContainer(libraryViewModel: LibraryViewModel) {
+fun MainContainer(
+    libraryViewModel: LibraryViewModel,
+    scannerRepository: ScannerRepository,
+    settingsRepository: SettingsRepository
+) {
     val navController = rememberNavController()
     val items = listOf(
         BottomNavItem("Bookmark", Screen.Bookmark.route, Icons.Default.Star),
@@ -91,7 +103,6 @@ fun MainContainer(libraryViewModel: LibraryViewModel) {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = navBackStackEntry?.destination
             
-            // Only show bottom bar on root destinations
             val rootRoutes = items.map { it.route }
             val showBottomBar = currentDestination?.route in rootRoutes
 
@@ -136,7 +147,26 @@ fun MainContainer(libraryViewModel: LibraryViewModel) {
                 ComicLibraryScreen(
                     viewModel = libraryViewModel,
                     onComicClick = { comic ->
-                        // Future: Navigate to detail
+                        navController.navigate(Screen.ComicDetail.createRoute(comic.relativePath))
+                    },
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Screen.ComicDetail.route,
+                arguments = listOf(navArgument("comicRelativePath") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val comicRelativePath = backStackEntry.arguments?.getString("comicRelativePath") ?: ""
+                val viewModel = ComicDetailViewModel(
+                    comicRelativePath = comicRelativePath,
+                    scannerRepository = scannerRepository,
+                    settingsRepository = settingsRepository
+                )
+                ComicDetailScreen(
+                    viewModel = viewModel,
+                    onChapterClick = { chapter ->
+                        // Future: Navigate to reader
                     },
                     onBackClick = { navController.popBackStack() }
                 )
