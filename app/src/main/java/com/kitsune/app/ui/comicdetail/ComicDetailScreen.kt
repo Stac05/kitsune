@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kitsune.app.data.repository.BookmarkWithCount
+import com.kitsune.app.data.repository.PlaylistWithCount
 import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.domain.model.Chapter
 import com.kitsune.app.domain.model.Comic
@@ -33,7 +35,10 @@ fun ComicDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val availableBookmarks by viewModel.availableBookmarks.collectAsState()
+    val availablePlaylists by viewModel.availablePlaylists.collectAsState()
+    
     var showBookmarkDialog by remember { mutableStateOf(false) }
+    var showPlaylistDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -47,6 +52,9 @@ fun ComicDetailScreen(
                 actions = {
                     IconButton(onClick = { showBookmarkDialog = true }) {
                         Icon(Icons.Default.Star, contentDescription = "Add to Bookmark")
+                    }
+                    IconButton(onClick = { showPlaylistDialog = true }) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Add to Playlist")
                     }
                 }
             )
@@ -82,44 +90,51 @@ fun ComicDetailScreen(
     }
 
     if (showBookmarkDialog) {
-        BookmarkSelectionDialog(
-            bookmarks = availableBookmarks,
-            onSelect = { bookmarkId ->
-                viewModel.addComicToBookmark(bookmarkId)
+        CollectionSelectionDialog(
+            title = "Add to Bookmark",
+            items = availableBookmarks.map { it.bookmark.id to it.bookmark.name },
+            onSelect = { id ->
+                viewModel.addComicToBookmark(id)
                 showBookmarkDialog = false
             },
             onDismiss = { showBookmarkDialog = false }
         )
     }
+
+    if (showPlaylistDialog) {
+        CollectionSelectionDialog(
+            title = "Add to Playlist",
+            items = availablePlaylists.map { it.playlist.id to it.playlist.name },
+            onSelect = { id ->
+                viewModel.addComicToPlaylist(id)
+                showPlaylistDialog = false
+            },
+            onDismiss = { showPlaylistDialog = false }
+        )
+    }
 }
 
 @Composable
-fun BookmarkSelectionDialog(
-    bookmarks: List<BookmarkWithCount>,
+fun CollectionSelectionDialog(
+    title: String,
+    items: List<Pair<Long, String>>,
     onSelect: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add to Bookmark") },
+        title = { Text(title) },
         text = {
-            if (bookmarks.isEmpty()) {
-                Text("No bookmarks available. Create one in the Bookmark tab.")
+            if (items.isEmpty()) {
+                Text("No entries available. Create one first.")
             } else {
                 LazyColumn {
-                    items(bookmarks) { item ->
+                    items(items) { item ->
                         ListItem(
-                            headlineContent = { Text(item.bookmark.name) },
+                            headlineContent = { Text(item.second) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSelect(item.bookmark.id) },
-                            leadingContent = { 
-                                Icon(
-                                    imageVector = Icons.Default.Star, 
-                                    contentDescription = null, 
-                                    tint = MaterialTheme.colorScheme.primary
-                                ) 
-                            }
+                                .clickable { onSelect(item.first) }
                         )
                     }
                 }

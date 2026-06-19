@@ -6,13 +6,10 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.kitsune.app.database.dao.BookmarkDao
 import com.kitsune.app.database.dao.ComicDao
+import com.kitsune.app.database.dao.PlaylistDao
 import com.kitsune.app.database.dao.ReadingProgressDao
 import com.kitsune.app.database.dao.SettingsDao
-import com.kitsune.app.database.entity.BookmarkComicEntity
-import com.kitsune.app.database.entity.BookmarkEntity
-import com.kitsune.app.database.entity.ComicEntity
-import com.kitsune.app.database.entity.ReadingProgressEntity
-import com.kitsune.app.database.entity.SettingsEntity
+import com.kitsune.app.database.entity.*
 
 @Database(
     entities = [
@@ -20,7 +17,9 @@ import com.kitsune.app.database.entity.SettingsEntity
         ComicEntity::class,
         ReadingProgressEntity::class,
         BookmarkEntity::class,
-        BookmarkComicEntity::class
+        BookmarkComicEntity::class,
+        PlaylistEntity::class,
+        PlaylistComicEntity::class
     ],
     version = 1,
     exportSchema = false
@@ -30,6 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun comicDao(): ComicDao
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun bookmarkDao(): BookmarkDao
+    abstract fun playlistDao(): PlaylistDao
 
     companion object {
         @Volatile

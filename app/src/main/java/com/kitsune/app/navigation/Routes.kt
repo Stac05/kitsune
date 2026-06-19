@@ -34,4 +34,10 @@ sealed class Screen(val route: String) {
             return "bookmark_detail/$bookmarkId"
         }
     }
+
+    object PlaylistDetail : Screen("playlist_detail/{playlistId}") {
+        fun createRoute(playlistId: Long): String {
+            return "playlist_detail/$playlistId"
+        }
+    }
 }

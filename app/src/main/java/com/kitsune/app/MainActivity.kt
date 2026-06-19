@@ -26,12 +26,7 @@ import androidx.navigation.navArgument
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.kitsune.app.core.StorageHelper
-import com.kitsune.app.data.repository.BookmarkRepository
-import com.kitsune.app.data.repository.BookmarkWithCount
-import com.kitsune.app.data.repository.ReaderRepository
-import com.kitsune.app.data.repository.ReadingProgressRepository
-import com.kitsune.app.data.repository.ScannerRepository
-import com.kitsune.app.data.repository.SettingsRepository
+import com.kitsune.app.data.repository.*
 import com.kitsune.app.database.AppDatabase
 import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.navigation.Screen
@@ -48,6 +43,7 @@ import com.kitsune.app.ui.library.ComicLibraryScreen
 import com.kitsune.app.ui.library.LibraryViewModel
 import com.kitsune.app.ui.local.LocalScreen
 import com.kitsune.app.ui.playlist.PlaylistScreen
+import com.kitsune.app.ui.playlist.PlaylistViewModel
 import com.kitsune.app.ui.reader.ReaderScreen
 import com.kitsune.app.ui.reader.ReaderViewModel
 import com.kitsune.app.ui.settings.OtherScreen
@@ -58,6 +54,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
 
     private lateinit var readerRepository: ReaderRepository
     private lateinit var bookmarkRepository: BookmarkRepository
+    private lateinit var playlistRepository: PlaylistRepository
     private lateinit var scannerRepository: ScannerRepository
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var progressRepository: ReadingProgressRepository
@@ -74,6 +71,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
         scannerRepository = ScannerRepository(comicScanner, database.comicDao())
         progressRepository = ReadingProgressRepository(database.readingProgressDao())
         bookmarkRepository = BookmarkRepository(database.bookmarkDao())
+        playlistRepository = PlaylistRepository(database.playlistDao())
         
         val cbzParser = CbzParser(this)
         readerRepository = ReaderRepository(cbzParser)
@@ -106,6 +104,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
                             readerRepository = readerRepository,
                             progressRepository = progressRepository,
                             bookmarkRepository = bookmarkRepository,
+                            playlistRepository = playlistRepository,
                             storageHelper = storageHelper
                         )
                     }
@@ -131,6 +130,7 @@ fun MainContainer(
     readerRepository: ReaderRepository,
     progressRepository: ReadingProgressRepository,
     bookmarkRepository: BookmarkRepository,
+    playlistRepository: PlaylistRepository,
     storageHelper: StorageHelper
 ) {
     val navController = rememberNavController()
@@ -185,7 +185,13 @@ fun MainContainer(
                     }
                 ) 
             }
-            composable(Screen.Playlist.route) { PlaylistScreen() }
+            composable(Screen.Playlist.route) { 
+                val viewModel = remember { PlaylistViewModel(playlistRepository, settingsRepository) }
+                PlaylistScreen(
+                    viewModel = viewModel,
+                    onPlaylistClick = { /* Future: Navigate to Playlist Detail */ }
+                ) 
+            }
             
             composable(Screen.Local.route) { 
                 LocalScreen(
