@@ -28,4 +28,10 @@ sealed class Screen(val route: String) {
             return "reader/${Uri.encode(comicRelativePath)}/${Uri.encode(chapterRelativePath)}"
         }
     }
+
+    object BookmarkDetail : Screen("bookmark_detail/{bookmarkId}") {
+        fun createRoute(bookmarkId: Long): String {
+            return "bookmark_detail/$bookmarkId"
+        }
+    }
 }

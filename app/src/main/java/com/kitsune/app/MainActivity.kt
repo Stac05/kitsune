@@ -26,6 +26,8 @@ import androidx.navigation.navArgument
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.kitsune.app.core.StorageHelper
+import com.kitsune.app.data.repository.BookmarkRepository
+import com.kitsune.app.data.repository.BookmarkWithCount
 import com.kitsune.app.data.repository.ReaderRepository
 import com.kitsune.app.data.repository.ReadingProgressRepository
 import com.kitsune.app.data.repository.ScannerRepository
@@ -36,7 +38,10 @@ import com.kitsune.app.navigation.Screen
 import com.kitsune.app.reader.CbzImageFetcher
 import com.kitsune.app.reader.CbzParser
 import com.kitsune.app.scanner.ComicScanner
+import com.kitsune.app.ui.bookmark.BookmarkDetailScreen
+import com.kitsune.app.ui.bookmark.BookmarkDetailViewModel
 import com.kitsune.app.ui.bookmark.BookmarkScreen
+import com.kitsune.app.ui.bookmark.BookmarkViewModel
 import com.kitsune.app.ui.comicdetail.ComicDetailScreen
 import com.kitsune.app.ui.comicdetail.ComicDetailViewModel
 import com.kitsune.app.ui.library.ComicLibraryScreen
@@ -52,17 +57,23 @@ import com.kitsune.app.ui.splash.SplashViewModel
 class MainActivity : ComponentActivity(), ImageLoaderFactory {
 
     private lateinit var readerRepository: ReaderRepository
+    private lateinit var bookmarkRepository: BookmarkRepository
+    private lateinit var scannerRepository: ScannerRepository
+    private lateinit var settingsRepository: SettingsRepository
+    private lateinit var progressRepository: ReadingProgressRepository
+    private lateinit var storageHelper: StorageHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
         // Manual DI
         val database = AppDatabase.getDatabase(this)
-        val settingsRepository = SettingsRepository(database.settingsDao())
-        val storageHelper = StorageHelper(this)
+        settingsRepository = SettingsRepository(database.settingsDao())
+        storageHelper = StorageHelper(this)
         val comicScanner = ComicScanner(this)
-        val scannerRepository = ScannerRepository(comicScanner, database.comicDao())
-        val progressRepository = ReadingProgressRepository(database.readingProgressDao())
+        scannerRepository = ScannerRepository(comicScanner, database.comicDao())
+        progressRepository = ReadingProgressRepository(database.readingProgressDao())
+        bookmarkRepository = BookmarkRepository(database.bookmarkDao())
         
         val cbzParser = CbzParser(this)
         readerRepository = ReaderRepository(cbzParser)
@@ -94,6 +105,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
                             settingsRepository = settingsRepository,
                             readerRepository = readerRepository,
                             progressRepository = progressRepository,
+                            bookmarkRepository = bookmarkRepository,
                             storageHelper = storageHelper
                         )
                     }
@@ -118,6 +130,7 @@ fun MainContainer(
     settingsRepository: SettingsRepository,
     readerRepository: ReaderRepository,
     progressRepository: ReadingProgressRepository,
+    bookmarkRepository: BookmarkRepository,
     storageHelper: StorageHelper
 ) {
     val navController = rememberNavController()
@@ -163,8 +176,17 @@ fun MainContainer(
             startDestination = Screen.Local.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Bookmark.route) { BookmarkScreen() }
+            composable(Screen.Bookmark.route) { 
+                val viewModel = remember { BookmarkViewModel(bookmarkRepository, settingsRepository) }
+                BookmarkScreen(
+                    viewModel = viewModel,
+                    onBookmarkClick = { item: BookmarkWithCount ->
+                        navController.navigate(Screen.BookmarkDetail.createRoute(item.bookmark.id))
+                    }
+                ) 
+            }
             composable(Screen.Playlist.route) { PlaylistScreen() }
+            
             composable(Screen.Local.route) { 
                 LocalScreen(
                     onComicsClick = { navController.navigate(Screen.ComicLibrary.route) },
@@ -188,12 +210,15 @@ fun MainContainer(
                 arguments = listOf(navArgument("comicRelativePath") { type = NavType.StringType })
             ) { backStackEntry ->
                 val comicRelativePath = backStackEntry.arguments?.getString("comicRelativePath") ?: ""
-                val viewModel = ComicDetailViewModel(
-                    comicRelativePath = comicRelativePath,
-                    scannerRepository = scannerRepository,
-                    settingsRepository = settingsRepository,
-                    progressRepository = progressRepository
-                )
+                val viewModel = remember(comicRelativePath) {
+                    ComicDetailViewModel(
+                        comicRelativePath = comicRelativePath,
+                        scannerRepository = scannerRepository,
+                        settingsRepository = settingsRepository,
+                        progressRepository = progressRepository,
+                        bookmarkRepository = bookmarkRepository
+                    )
+                }
                 ComicDetailScreen(
                     viewModel = viewModel,
                     onChapterClick = { chapter ->
@@ -216,7 +241,7 @@ fun MainContainer(
                 val comicRelativePath = backStackEntry.arguments?.getString("comicRelativePath") ?: ""
                 val chapterRelativePath = backStackEntry.arguments?.getString("chapterRelativePath") ?: ""
                 
-                val viewModel = remember {
+                val viewModel = remember(comicRelativePath, chapterRelativePath) {
                     ReaderViewModel(
                         comicRelativePath = comicRelativePath,
                         currentChapterPath = chapterRelativePath,
@@ -230,6 +255,28 @@ fun MainContainer(
                 
                 ReaderScreen(
                     viewModel = viewModel,
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Screen.BookmarkDetail.route,
+                arguments = listOf(navArgument("bookmarkId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val bookmarkId = backStackEntry.arguments?.getLong("bookmarkId") ?: 0L
+                val viewModel = remember(bookmarkId) {
+                    BookmarkDetailViewModel(
+                        bookmarkId = bookmarkId,
+                        bookmarkRepository = bookmarkRepository,
+                        scannerRepository = scannerRepository,
+                        settingsRepository = settingsRepository
+                    )
+                }
+                BookmarkDetailScreen(
+                    viewModel = viewModel,
+                    onComicClick = { comic ->
+                        navController.navigate(Screen.ComicDetail.createRoute(comic.relativePath))
+                    },
                     onBackClick = { navController.popBackStack() }
                 )
             }

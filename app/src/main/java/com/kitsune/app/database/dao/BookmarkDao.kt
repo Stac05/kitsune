@@ -1,0 +1,39 @@
+package com.kitsune.app.database.dao
+
+import androidx.room.*
+import com.kitsune.app.database.entity.BookmarkComicEntity
+import com.kitsune.app.database.entity.BookmarkEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface BookmarkDao {
+    @Query("SELECT * FROM bookmarks ORDER BY createdAt DESC")
+    fun getAllBookmarks(): Flow<List<BookmarkEntity>>
+
+    @Query("SELECT * FROM bookmarks WHERE id = :id")
+    suspend fun getBookmarkById(id: Long): BookmarkEntity?
+
+    @Query("SELECT COUNT(*) FROM bookmark_comics WHERE bookmarkId = :bookmarkId")
+    fun getComicCountInBookmark(bookmarkId: Long): Flow<Int>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBookmark(bookmark: BookmarkEntity): Long
+
+    @Query("UPDATE bookmarks SET name = :newName WHERE id = :bookmarkId")
+    suspend fun renameBookmark(bookmarkId: Long, newName: String)
+
+    @Query("DELETE FROM bookmarks WHERE id = :bookmarkId")
+    suspend fun deleteBookmark(bookmarkId: Long)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun addComicToBookmark(bookmarkComic: BookmarkComicEntity)
+
+    @Query("DELETE FROM bookmark_comics WHERE bookmarkId = :bookmarkId AND comicRelativePath = :comicPath")
+    suspend fun removeComicFromBookmark(bookmarkId: Long, comicPath: String)
+
+    @Query("SELECT comicRelativePath FROM bookmark_comics WHERE bookmarkId = :bookmarkId ORDER BY createdAt DESC")
+    fun getComicsInBookmark(bookmarkId: Long): Flow<List<String>>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM bookmark_comics WHERE bookmarkId = :bookmarkId AND comicRelativePath = :comicPath)")
+    fun isComicInBookmark(bookmarkId: Long, comicPath: String): Flow<Boolean>
+}

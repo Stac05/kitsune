@@ -1,22 +1,24 @@
 package com.kitsune.app.ui.comicdetail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.kitsune.app.data.repository.BookmarkWithCount
 import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.domain.model.Chapter
 import com.kitsune.app.domain.model.Comic
@@ -30,6 +32,8 @@ fun ComicDetailScreen(
     onBackClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val availableBookmarks by viewModel.availableBookmarks.collectAsState()
+    var showBookmarkDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -38,6 +42,11 @@ fun ComicDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showBookmarkDialog = true }) {
+                        Icon(Icons.Default.Star, contentDescription = "Add to Bookmark")
                     }
                 }
             )
@@ -71,6 +80,56 @@ fun ComicDetailScreen(
             }
         }
     }
+
+    if (showBookmarkDialog) {
+        BookmarkSelectionDialog(
+            bookmarks = availableBookmarks,
+            onSelect = { bookmarkId ->
+                viewModel.addComicToBookmark(bookmarkId)
+                showBookmarkDialog = false
+            },
+            onDismiss = { showBookmarkDialog = false }
+        )
+    }
+}
+
+@Composable
+fun BookmarkSelectionDialog(
+    bookmarks: List<BookmarkWithCount>,
+    onSelect: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add to Bookmark") },
+        text = {
+            if (bookmarks.isEmpty()) {
+                Text("No bookmarks available. Create one in the Bookmark tab.")
+            } else {
+                LazyColumn {
+                    items(bookmarks) { item ->
+                        ListItem(
+                            headlineContent = { Text(item.bookmark.name) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(item.bookmark.id) },
+                            leadingContent = { 
+                                Icon(
+                                    imageVector = Icons.Default.Star, 
+                                    contentDescription = null, 
+                                    tint = MaterialTheme.colorScheme.primary
+                                ) 
+                            }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable

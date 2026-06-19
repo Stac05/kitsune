@@ -3,6 +3,8 @@ package com.kitsune.app.ui.comicdetail
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kitsune.app.data.repository.BookmarkRepository
+import com.kitsune.app.data.repository.BookmarkWithCount
 import com.kitsune.app.data.repository.ReadingProgressRepository
 import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
@@ -14,33 +16,36 @@ import kotlinx.coroutines.launch
 
 /**
  * ViewModel untuk mengelola data detail sebuah komik.
- * Memuat metadata komik, daftar chapter, dan progres membaca secara lazy.
+ * Memuat metadata komik, daftar chapter, progres membaca, dan status bookmark secara lazy.
  */
 class ComicDetailViewModel(
     private val comicRelativePath: String,
     private val scannerRepository: ScannerRepository,
     private val settingsRepository: SettingsRepository,
-    private val progressRepository: ReadingProgressRepository
+    private val progressRepository: ReadingProgressRepository,
+    private val bookmarkRepository: BookmarkRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ComicDetailUiState>(ComicDetailUiState.Loading)
     val uiState: StateFlow<ComicDetailUiState> = _uiState.asStateFlow()
 
+    private val _availableBookmarks = MutableStateFlow<List<BookmarkWithCount>>(emptyList())
+    val availableBookmarks: StateFlow<List<BookmarkWithCount>> = _availableBookmarks.asStateFlow()
+
     init {
         loadComicDetail()
+        loadAvailableBookmarks()
     }
 
     private fun loadComicDetail() {
         viewModelScope.launch {
             try {
-                // 1. Ambil data komik dari repository
                 val comic = scannerRepository.getComicByPath(comicRelativePath)
                 if (comic == null) {
                     _uiState.value = ComicDetailUiState.Error("Comic not found")
                     return@launch
                 }
 
-                // 2. Ambil root URI untuk memindai chapter
                 val settings = settingsRepository.settings.first()
                 val rootUriString = settings?.rootFolderUri
 
@@ -49,10 +54,8 @@ class ComicDetailViewModel(
                     return@launch
                 }
 
-                // 3. Scan chapter di dalam folder komik (Lazy Loading)
                 val chapters = scannerRepository.getChapters(rootUriString.toUri(), comicRelativePath)
 
-                // 4. Ambil progres membaca terbaru secara real-time
                 progressRepository.getProgressByComic(comicRelativePath).collect { progress ->
                     _uiState.value = ComicDetailUiState.Success(
                         comic = comic,
@@ -64,6 +67,24 @@ class ComicDetailViewModel(
                 _uiState.value = ComicDetailUiState.Error("Failed to load details: ${e.message}")
             }
         }
+    }
+
+    private fun loadAvailableBookmarks() {
+        viewModelScope.launch {
+            bookmarkRepository.getAllBookmarksWithCount().collect { bookmarks ->
+                _availableBookmarks.value = bookmarks
+            }
+        }
+    }
+
+    fun addComicToBookmark(bookmarkId: Long) {
+        viewModelScope.launch {
+            bookmarkRepository.addComicToBookmark(bookmarkId, comicRelativePath)
+        }
+    }
+
+    fun isComicInBookmark(bookmarkId: Long): Flow<Boolean> {
+        return bookmarkRepository.isComicInBookmark(bookmarkId, comicRelativePath)
     }
 }
 
