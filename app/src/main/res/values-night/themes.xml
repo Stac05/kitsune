@@ -1,7 +1,9 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.Kitsune" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <item name="colorPrimary">@color/kitsune_orange</item>
+        <item name="android:windowBackground">@color/kitsune_background</item>
+        <item name="android:statusBarColor">@color/kitsune_background</item>
+        <item name="android:navigationBarColor">@color/kitsune_background</item>
     </style>
 </resources>

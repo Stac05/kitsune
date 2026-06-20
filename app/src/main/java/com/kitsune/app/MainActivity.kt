@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -65,6 +66,9 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
     private lateinit var storageHelper: StorageHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Install Splash Screen
+        installSplashScreen()
+
         super.onCreate(savedInstanceState)
         
         // Manual DI
