@@ -25,14 +25,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import coil.ImageLoader
-import coil.ImageLoaderFactory
 import com.kitsune.app.core.StorageHelper
 import com.kitsune.app.data.repository.*
 import com.kitsune.app.database.AppDatabase
 import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.navigation.Screen
-import com.kitsune.app.reader.CbzImageFetcher
 import com.kitsune.app.reader.CbzParser
 import com.kitsune.app.scanner.ComicScanner
 import com.kitsune.app.ui.bookmark.BookmarkDetailScreen
@@ -44,6 +41,7 @@ import com.kitsune.app.ui.comicdetail.ComicDetailViewModel
 import com.kitsune.app.ui.library.ComicLibraryScreen
 import com.kitsune.app.ui.library.LibraryViewModel
 import com.kitsune.app.ui.local.LocalScreen
+import com.kitsune.app.ui.local.LocalViewModel
 import com.kitsune.app.ui.playlist.PlaylistDetailScreen
 import com.kitsune.app.ui.playlist.PlaylistDetailViewModel
 import com.kitsune.app.ui.playlist.PlaylistScreen
@@ -55,7 +53,7 @@ import com.kitsune.app.ui.settings.SettingsViewModel
 import com.kitsune.app.ui.splash.SplashScreen
 import com.kitsune.app.ui.splash.SplashViewModel
 
-class MainActivity : ComponentActivity(), ImageLoaderFactory {
+class MainActivity : ComponentActivity() {
 
     private lateinit var readerRepository: ReaderRepository
     private lateinit var bookmarkRepository: BookmarkRepository
@@ -77,7 +75,7 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
         storageHelper = StorageHelper(this)
         val comicScanner = ComicScanner(this)
         scannerRepository = ScannerRepository(comicScanner, database.comicDao())
-        progressRepository = ReadingProgressRepository(database.readingProgressDao())
+        progressRepository = ReadingProgressRepository(database.readingProgressDao(), database.comicDao())
         bookmarkRepository = BookmarkRepository(database.bookmarkDao())
         playlistRepository = PlaylistRepository(database.playlistDao())
         
@@ -122,14 +120,6 @@ class MainActivity : ComponentActivity(), ImageLoaderFactory {
                 }
             }
         }
-    }
-
-    override fun newImageLoader(): ImageLoader {
-        return ImageLoader.Builder(this)
-            .components {
-                add(CbzImageFetcher.Factory(applicationContext, readerRepository))
-            }
-            .build()
     }
 }
 
@@ -185,7 +175,9 @@ fun MainContainer(
         NavHost(
             navController = navController,
             startDestination = Screen.Local.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(
+                bottom = innerPadding.calculateBottomPadding()
+            )
         ) {
             composable(Screen.Bookmark.route) { 
                 val bookmarkViewModel: BookmarkViewModel = viewModel {
@@ -211,7 +203,19 @@ fun MainContainer(
             }
             
             composable(Screen.Local.route) { 
+                val localViewModel: LocalViewModel = viewModel {
+                    LocalViewModel(progressRepository)
+                }
                 LocalScreen(
+                    viewModel = localViewModel,
+                    onContinueReading = { lastRead ->
+                        navController.navigate(
+                            Screen.Reader.createRoute(
+                                lastRead.progress.comicRelativePath,
+                                lastRead.progress.chapterRelativePath
+                            )
+                        )
+                    },
                     onComicsClick = { navController.navigate(Screen.ComicLibrary.route) },
                     onVideosClick = { /* Future */ }
                 ) 

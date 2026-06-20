@@ -19,6 +19,14 @@ class PlaylistDetailViewModel(
     private val _uiState = MutableStateFlow<PlaylistDetailUiState>(PlaylistDetailUiState.Loading)
     val uiState: StateFlow<PlaylistDetailUiState> = _uiState.asStateFlow()
 
+    // Selection Mode State
+    private val _selectedPaths = MutableStateFlow<Set<String>>(emptySet())
+    val selectedPaths: StateFlow<Set<String>> = _selectedPaths.asStateFlow()
+
+    val selectionMode: StateFlow<Boolean> = _selectedPaths
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     init {
         loadPlaylistDetail()
     }
@@ -36,8 +44,6 @@ class PlaylistDetailViewModel(
                 scannerRepository.allComics,
                 settingsRepository.settings.map { it?.gridSize ?: 3 }
             ) { playlistPaths, allComics, gridSize ->
-                // Filter and sort comics based on their position in the playlist if we had a full model,
-                // but since getComicsInPlaylist returns paths in order, we map them.
                 val comicMap = allComics.associateBy { it.relativePath }
                 val sortedComics = playlistPaths.mapNotNull { comicMap[it] }
 
@@ -51,6 +57,36 @@ class PlaylistDetailViewModel(
             }.collect { state ->
                 _uiState.value = state
             }
+        }
+    }
+
+    fun toggleSelection(path: String) {
+        val current = _selectedPaths.value
+        if (current.contains(path)) {
+            _selectedPaths.value = current - path
+        } else {
+            _selectedPaths.value = current + path
+        }
+    }
+
+    fun selectAll() {
+        val state = _uiState.value
+        if (state is PlaylistDetailUiState.Success) {
+            _selectedPaths.value = state.comics.map { it.relativePath }.toSet()
+        }
+    }
+
+    fun clearSelection() {
+        _selectedPaths.value = emptySet()
+    }
+
+    fun removeSelected() {
+        val paths = _selectedPaths.value.toList()
+        if (paths.isEmpty()) return
+        
+        viewModelScope.launch {
+            playlistRepository.removeComicsFromPlaylist(playlistId, paths)
+            clearSelection()
         }
     }
 

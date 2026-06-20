@@ -50,6 +50,13 @@ class BookmarkRepository(private val bookmarkDao: BookmarkDao) {
         bookmarkDao.deleteBookmark(id)
     }
 
+    /**
+     * Menghapus banyak bookmark sekaligus.
+     */
+    suspend fun deleteBookmarks(ids: List<Long>) {
+        bookmarkDao.deleteBookmarks(ids)
+    }
+
     suspend fun addComicToBookmark(bookmarkId: Long, comicPath: String) {
         bookmarkDao.addComicToBookmark(
             BookmarkComicEntity(bookmarkId = bookmarkId, comicRelativePath = comicPath)
@@ -60,8 +67,22 @@ class BookmarkRepository(private val bookmarkDao: BookmarkDao) {
         bookmarkDao.removeComicFromBookmark(bookmarkId, comicPath)
     }
 
+    /**
+     * Menghapus banyak komik dari bookmark tertentu sekaligus.
+     */
+    suspend fun removeComicsFromBookmark(bookmarkId: Long, comicPaths: List<String>) {
+        bookmarkDao.removeComicsFromBookmark(bookmarkId, comicPaths)
+    }
+
     fun isComicInBookmark(bookmarkId: Long, comicPath: String): Flow<Boolean> {
         return bookmarkDao.isComicInBookmark(bookmarkId, comicPath)
+    }
+
+    /**
+     * Mendapatkan daftar ID bookmark yang berisi komik tertentu.
+     */
+    fun getBookmarkIdsForComic(comicPath: String): Flow<List<Long>> {
+        return bookmarkDao.getBookmarkIdsForComic(comicPath)
     }
 }
 

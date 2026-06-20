@@ -25,15 +25,24 @@ interface BookmarkDao {
     @Query("DELETE FROM bookmarks WHERE id = :bookmarkId")
     suspend fun deleteBookmark(bookmarkId: Long)
 
+    @Query("DELETE FROM bookmarks WHERE id IN (:bookmarkIds)")
+    suspend fun deleteBookmarks(bookmarkIds: List<Long>)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun addComicToBookmark(bookmarkComic: BookmarkComicEntity)
 
     @Query("DELETE FROM bookmark_comics WHERE bookmarkId = :bookmarkId AND comicRelativePath = :comicPath")
     suspend fun removeComicFromBookmark(bookmarkId: Long, comicPath: String)
 
+    @Query("DELETE FROM bookmark_comics WHERE bookmarkId = :bookmarkId AND comicRelativePath IN (:comicPaths)")
+    suspend fun removeComicsFromBookmark(bookmarkId: Long, comicPaths: List<String>)
+
     @Query("SELECT comicRelativePath FROM bookmark_comics WHERE bookmarkId = :bookmarkId ORDER BY createdAt DESC")
     fun getComicsInBookmark(bookmarkId: Long): Flow<List<String>>
 
     @Query("SELECT EXISTS(SELECT 1 FROM bookmark_comics WHERE bookmarkId = :bookmarkId AND comicRelativePath = :comicPath)")
     fun isComicInBookmark(bookmarkId: Long, comicPath: String): Flow<Boolean>
+
+    @Query("SELECT bookmarkId FROM bookmark_comics WHERE comicRelativePath = :comicPath")
+    fun getBookmarkIdsForComic(comicPath: String): Flow<List<Long>>
 }

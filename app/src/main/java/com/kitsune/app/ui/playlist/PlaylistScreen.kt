@@ -1,14 +1,17 @@
 package com.kitsune.app.ui.playlist
 
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,24 +28,44 @@ fun PlaylistScreen(
     onPlaylistClick: (PlaylistWithCount) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val selectionMode by viewModel.selectionMode.collectAsState()
+    val selectedIds by viewModel.selectedIds.collectAsState()
+    
     var showAddDialog by remember { mutableStateOf(false) }
+    var showBulkDeleteDialog by remember { mutableStateOf(false) }
+
+    // Handle Back Button to exit selection mode
+    BackHandler(enabled = selectionMode) {
+        viewModel.clearSelection()
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Playlists") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black,
-                    titleContentColor = Color.White
+            if (selectionMode) {
+                PlaylistSelectionTopAppBar(
+                    selectedCount = selectedIds.size,
+                    onCancel = { viewModel.clearSelection() },
+                    onSelectAll = { viewModel.selectAll() },
+                    onDelete = { showBulkDeleteDialog = true }
                 )
-            )
+            } else {
+                TopAppBar(
+                    title = { Text("Playlists") },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black,
+                        titleContentColor = Color.White
+                    )
+                )
+            }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Playlist")
+            if (!selectionMode) {
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Playlist")
+                }
             }
         },
         containerColor = Color.Black
@@ -84,10 +107,20 @@ fun PlaylistScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(state.playlists) { item ->
+                            val isSelected = selectedIds.contains(item.playlist.id)
                             PlaylistItem(
                                 playlist = item,
-                                onClick = { onPlaylistClick(item) },
-                                onDelete = { viewModel.deletePlaylist(item.playlist.id) }
+                                isSelected = isSelected,
+                                onClick = {
+                                    if (selectionMode) {
+                                        viewModel.toggleSelection(item.playlist.id)
+                                    } else {
+                                        onPlaylistClick(item)
+                                    }
+                                },
+                                onLongClick = {
+                                    viewModel.toggleSelection(item.playlist.id)
+                                }
                             )
                         }
                     }
@@ -135,58 +168,128 @@ fun PlaylistScreen(
             }
         )
     }
+
+    if (showBulkDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showBulkDeleteDialog = false },
+            title = { Text("Delete Playlists") },
+            text = { Text("Delete ${selectedIds.size} playlists?\nThis action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteSelected()
+                        showBulkDeleteDialog = false
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaylistSelectionTopAppBar(
+    selectedCount: Int,
+    onCancel: () -> Unit,
+    onSelectAll: () -> Unit,
+    onDelete: () -> Unit
+) {
+    TopAppBar(
+        title = { Text("$selectedCount Selected") },
+        navigationIcon = {
+            IconButton(onClick = onCancel) {
+                Icon(Icons.Default.Close, contentDescription = "Cancel")
+            }
+        },
+        actions = {
+            IconButton(onClick = onSelectAll) {
+                Icon(Icons.Default.CheckCircle, contentDescription = "Select All")
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlaylistItem(
     playlist: PlaylistWithCount,
+    isSelected: Boolean,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onLongClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .then(
+                if (isSelected) Modifier.border(
+                    2.dp, 
+                    MaterialTheme.colorScheme.primary, 
+                    MaterialTheme.shapes.medium
+                ) else Modifier
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1E1E)
+            containerColor = if (isSelected) Color(0xFF2C2C2C) else Color(0xFF1E1E1E)
         )
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.List,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                IconButton(onClick = onDelete) {
+        Box(modifier = Modifier.padding(16.dp)) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(20.dp)
+                        imageVector = Icons.AutoMirrored.Filled.List,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = playlist.playlist.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1
+                )
+                Text(
+                    text = "${playlist.count} Comics",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = playlist.playlist.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 1
-            )
-            Text(
-                text = "${playlist.count} Comics",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray
-            )
+            
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .align(Alignment.TopEnd)
+                )
+            }
         }
     }
 }

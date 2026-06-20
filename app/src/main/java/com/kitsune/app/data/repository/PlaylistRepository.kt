@@ -50,6 +50,13 @@ class PlaylistRepository(private val playlistDao: PlaylistDao) {
         playlistDao.deletePlaylist(id)
     }
 
+    /**
+     * Menghapus banyak playlist sekaligus.
+     */
+    suspend fun deletePlaylists(ids: List<Long>) {
+        playlistDao.deletePlaylists(ids)
+    }
+
     suspend fun addComicToPlaylist(playlistId: Long, comicPath: String) {
         val maxPos = playlistDao.getMaxPosition(playlistId) ?: -1
         playlistDao.addComicToPlaylist(
@@ -63,6 +70,13 @@ class PlaylistRepository(private val playlistDao: PlaylistDao) {
 
     suspend fun removeComicFromPlaylist(playlistId: Long, comicPath: String) {
         playlistDao.removeComicFromPlaylist(playlistId, comicPath)
+    }
+
+    /**
+     * Menghapus banyak komik dari playlist tertentu sekaligus.
+     */
+    suspend fun removeComicsFromPlaylist(playlistId: Long, comicPaths: List<String>) {
+        playlistDao.removeComicsFromPlaylist(playlistId, comicPaths)
     }
 
     fun isComicInPlaylist(playlistId: Long, comicPath: String): Flow<Boolean> {

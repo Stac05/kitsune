@@ -1,13 +1,22 @@
 package com.kitsune.app.data.repository
 
+import com.kitsune.app.database.dao.ComicDao
 import com.kitsune.app.database.dao.ReadingProgressDao
 import com.kitsune.app.database.entity.ReadingProgressEntity
+import com.kitsune.app.domain.model.Comic
+import com.kitsune.app.domain.model.LastReadComic
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * Repository untuk mengelola data progres membaca.
  */
-class ReadingProgressRepository(private val readingProgressDao: ReadingProgressDao) {
+class ReadingProgressRepository(
+    private val readingProgressDao: ReadingProgressDao,
+    private val comicDao: ComicDao
+) {
 
     /**
      * Mendapatkan aliran data progres untuk sebuah komik.
@@ -39,8 +48,6 @@ class ReadingProgressRepository(private val readingProgressDao: ReadingProgressD
             totalPages = totalPages,
             lastReadAt = System.currentTimeMillis()
         )
-        // Karena OnConflictStrategy.REPLACE di Dao, ini akan memperbarui entri yang ada
-        // berdasarkan indeks unik comicRelativePath.
         readingProgressDao.saveProgress(progress)
     }
 
@@ -49,5 +56,34 @@ class ReadingProgressRepository(private val readingProgressDao: ReadingProgressD
      */
     suspend fun deleteProgress(comicPath: String) {
         readingProgressDao.deleteProgress(comicPath)
+    }
+
+    /**
+     * Mendapatkan progres membaca terbaru yang digabungkan dengan data komik.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun getLatestReadComic(): Flow<LastReadComic?> {
+        return readingProgressDao.getLatestProgress().flatMapLatest { progress ->
+            if (progress == null) {
+                flowOf(null)
+            } else {
+                val comicEntity = comicDao.getComicByPath(progress.comicRelativePath)
+                if (comicEntity != null) {
+                    flowOf(
+                        LastReadComic(
+                            comic = Comic(
+                                title = comicEntity.title,
+                                relativePath = comicEntity.relativePath,
+                                coverUri = comicEntity.coverUri,
+                                lastModified = comicEntity.lastModified
+                            ),
+                            progress = progress
+                        )
+                    )
+                } else {
+                    flowOf(null)
+                }
+            }
+        }
     }
 }

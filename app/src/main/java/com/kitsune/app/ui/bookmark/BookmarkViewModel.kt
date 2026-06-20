@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 
 /**
  * ViewModel untuk mengelola daftar Bookmark.
+ * Mendukung Selection Mode untuk pengelolaan massal.
  */
 class BookmarkViewModel(
     private val bookmarkRepository: BookmarkRepository,
@@ -18,6 +19,14 @@ class BookmarkViewModel(
 
     private val _uiState = MutableStateFlow<BookmarkUiState>(BookmarkUiState.Loading)
     val uiState: StateFlow<BookmarkUiState> = _uiState.asStateFlow()
+
+    // Selection Mode State
+    private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedIds: StateFlow<Set<Long>> = _selectedIds.asStateFlow()
+
+    val selectionMode: StateFlow<Boolean> = _selectedIds
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     init {
         loadBookmarks()
@@ -39,6 +48,36 @@ class BookmarkViewModel(
             }.collect { state ->
                 _uiState.value = state
             }
+        }
+    }
+
+    fun toggleSelection(id: Long) {
+        val current = _selectedIds.value
+        if (current.contains(id)) {
+            _selectedIds.value = current - id
+        } else {
+            _selectedIds.value = current + id
+        }
+    }
+
+    fun selectAll() {
+        val state = _uiState.value
+        if (state is BookmarkUiState.Success) {
+            _selectedIds.value = state.bookmarks.map { it.bookmark.id }.toSet()
+        }
+    }
+
+    fun clearSelection() {
+        _selectedIds.value = emptySet()
+    }
+
+    fun deleteSelected() {
+        val ids = _selectedIds.value.toList()
+        if (ids.isEmpty()) return
+        
+        viewModelScope.launch {
+            bookmarkRepository.deleteBookmarks(ids)
+            clearSelection()
         }
     }
 

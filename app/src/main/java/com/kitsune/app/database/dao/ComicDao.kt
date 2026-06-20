@@ -16,6 +16,9 @@ interface ComicDao {
     @Query("SELECT * FROM comics")
     suspend fun getAllComicsSync(): List<ComicEntity>
 
+    @Query("SELECT * FROM comics WHERE relativePath = :path LIMIT 1")
+    suspend fun getComicByPath(path: String): ComicEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertComics(comics: List<ComicEntity>)
 

@@ -88,9 +88,17 @@ class ReaderViewModel(
                     }
                     _currentPage.value = startPage
 
+                    // Remove .cbz extension (case-insensitive)
+                    val rawName = chapterPath.substringAfterLast('/')
+                    val cleanName = if (rawName.endsWith(".cbz", ignoreCase = true)) {
+                        rawName.dropLast(4)
+                    } else {
+                        rawName
+                    }
+
                     _uiState.value = ReaderUiState.Success(
                         pages = pages,
-                        chapterName = chapterPath.substringAfterLast('/'),
+                        chapterName = cleanName,
                         readingMode = readingMode
                     )
                     

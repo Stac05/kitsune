@@ -25,11 +25,17 @@ interface PlaylistDao {
     @Query("DELETE FROM playlists WHERE id = :playlistId")
     suspend fun deletePlaylist(playlistId: Long)
 
+    @Query("DELETE FROM playlists WHERE id IN (:playlistIds)")
+    suspend fun deletePlaylists(playlistIds: List<Long>)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun addComicToPlaylist(playlistComic: PlaylistComicEntity)
 
     @Query("DELETE FROM playlist_comics WHERE playlistId = :playlistId AND comicRelativePath = :comicPath")
     suspend fun removeComicFromPlaylist(playlistId: Long, comicPath: String)
+
+    @Query("DELETE FROM playlist_comics WHERE playlistId = :playlistId AND comicRelativePath IN (:comicPaths)")
+    suspend fun removeComicsFromPlaylist(playlistId: Long, comicPaths: List<String>)
 
     @Query("SELECT comicRelativePath FROM playlist_comics WHERE playlistId = :playlistId ORDER BY position ASC, createdAt DESC")
     fun getComicsInPlaylist(playlistId: Long): Flow<List<String>>

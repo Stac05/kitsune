@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.kitsune.app.data.repository.BookmarkWithCount
 import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.domain.model.Chapter
 import com.kitsune.app.domain.model.Comic
@@ -35,6 +35,7 @@ fun ComicDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val availableBookmarks by viewModel.availableBookmarks.collectAsState()
     val availablePlaylists by viewModel.availablePlaylists.collectAsState()
+    val isBookmarked by viewModel.isBookmarked.collectAsState()
     
     var showBookmarkDialog by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf(false) }
@@ -50,7 +51,11 @@ fun ComicDetailScreen(
                 },
                 actions = {
                     IconButton(onClick = { showBookmarkDialog = true }) {
-                        Icon(Icons.Default.Star, contentDescription = "Add to Bookmark")
+                        Icon(
+                            imageVector = if (isBookmarked) Icons.Filled.Star else Icons.Outlined.Star,
+                            contentDescription = "Bookmark",
+                            tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
                     }
                     IconButton(onClick = { showPlaylistDialog = true }) {
                         Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Add to Playlist")
@@ -89,12 +94,10 @@ fun ComicDetailScreen(
     }
 
     if (showBookmarkDialog) {
-        CollectionSelectionDialog(
-            title = "Add to Bookmark",
-            items = availableBookmarks.map { it.bookmark.id to it.bookmark.name },
-            onSelect = { id ->
-                viewModel.addComicToBookmark(id)
-                showBookmarkDialog = false
+        BookmarkMembershipDialog(
+            bookmarks = availableBookmarks,
+            onToggle = { id, isMember ->
+                viewModel.toggleBookmarkMembership(id, isMember)
             },
             onDismiss = { showBookmarkDialog = false }
         )
@@ -111,6 +114,43 @@ fun ComicDetailScreen(
             onDismiss = { showPlaylistDialog = false }
         )
     }
+}
+
+@Composable
+fun BookmarkMembershipDialog(
+    bookmarks: List<BookmarkWithMembership>,
+    onToggle: (Long, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Manage Bookmarks") },
+        text = {
+            if (bookmarks.isEmpty()) {
+                Text("No bookmarks available. Create one first.")
+            } else {
+                LazyColumn {
+                    items(bookmarks) { item ->
+                        ListItem(
+                            headlineContent = { Text(item.bookmark.bookmark.name) },
+                            trailingContent = {
+                                Checkbox(
+                                    checked = item.isMember,
+                                    onCheckedChange = null // Handled by ListItem click
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggle(item.bookmark.bookmark.id, item.isMember) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        }
+    )
 }
 
 @Composable
@@ -201,7 +241,7 @@ fun ComicHeader(comic: Comic) {
         Card(
             modifier = Modifier
                 .width(120.dp)
-                .aspectRatio(2f / 3f),
+                .aspectRatio(5f / 7f),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
             AsyncImage(
@@ -293,7 +333,9 @@ fun ChapterItem(
     ListItem(
         headlineContent = { Text(chapter.name) },
         supportingContent = { Text("CBZ File") },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
     )
 }

@@ -1,15 +1,17 @@
 package com.kitsune.app.ui.bookmark
 
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,64 +31,82 @@ fun BookmarkDetailScreen(
     onBackClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val selectionMode by viewModel.selectionMode.collectAsState()
+    val selectedPaths by viewModel.selectedPaths.collectAsState()
+
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showBulkRemoveConfirm by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+
+    // Handle Back Button to exit selection mode
+    BackHandler(enabled = selectionMode) {
+        viewModel.clearSelection()
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    if (uiState is BookmarkDetailUiState.Success) {
-                        Text((uiState as BookmarkDetailUiState.Success).bookmarkName)
-                    } else {
-                        Text("Bookmark Detail")
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Rename Bookmark") },
-                                onClick = {
-                                    showMenu = false
-                                    showRenameDialog = true
-                                },
-                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delete Bookmark") },
-                                onClick = {
-                                    showMenu = false
-                                    showDeleteConfirm = true
-                                },
-                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                                colors = MenuDefaults.itemColors(
-                                    textColor = MaterialTheme.colorScheme.error,
-                                    leadingIconColor = MaterialTheme.colorScheme.error
-                                )
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                    actionIconContentColor = Color.White
+            if (selectionMode) {
+                BookmarkDetailSelectionTopAppBar(
+                    selectedCount = selectedPaths.size,
+                    onCancel = { viewModel.clearSelection() },
+                    onSelectAll = { viewModel.selectAll() },
+                    onRemove = { showBulkRemoveConfirm = true }
                 )
-            )
+            } else {
+                TopAppBar(
+                    title = {
+                        if (uiState is BookmarkDetailUiState.Success) {
+                            Text((uiState as BookmarkDetailUiState.Success).bookmarkName)
+                        } else {
+                            Text("Bookmark Detail")
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Rename Bookmark") },
+                                    onClick = {
+                                        showMenu = false
+                                        showRenameDialog = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete Bookmark") },
+                                    onClick = {
+                                        showMenu = false
+                                        showDeleteConfirm = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                    colors = MenuDefaults.itemColors(
+                                        textColor = MaterialTheme.colorScheme.error,
+                                        leadingIconColor = MaterialTheme.colorScheme.error
+                                    )
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                        actionIconContentColor = Color.White
+                    )
+                )
+            }
         },
         containerColor = Color.Black
     ) { padding ->
@@ -122,10 +142,20 @@ fun BookmarkDetailScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(state.comics) { comic ->
+                                val isSelected = selectedPaths.contains(comic.relativePath)
                                 BookmarkedComicItem(
                                     comic = comic,
-                                    onComicClick = { onComicClick(comic) },
-                                    onRemove = { viewModel.removeComic(comic.relativePath) }
+                                    isSelected = isSelected,
+                                    onClick = {
+                                        if (selectionMode) {
+                                            viewModel.toggleSelection(comic.relativePath)
+                                        } else {
+                                            onComicClick(comic)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        viewModel.toggleSelection(comic.relativePath)
+                                    }
                                 )
                             }
                         }
@@ -186,24 +216,89 @@ fun BookmarkDetailScreen(
             }
         )
     }
+
+    if (showBulkRemoveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showBulkRemoveConfirm = false },
+            title = { Text("Remove Comics") },
+            text = { Text("Remove ${selectedPaths.size} comics from this bookmark?\nThis action can be undone by adding them again later.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeSelected()
+                    showBulkRemoveConfirm = false
+                }) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkRemoveConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BookmarkDetailSelectionTopAppBar(
+    selectedCount: Int,
+    onCancel: () -> Unit,
+    onSelectAll: () -> Unit,
+    onRemove: () -> Unit
+) {
+    TopAppBar(
+        title = { Text("$selectedCount Selected") },
+        navigationIcon = {
+            IconButton(onClick = onCancel) {
+                Icon(Icons.Default.Close, contentDescription = "Cancel")
+            }
+        },
+        actions = {
+            IconButton(onClick = onSelectAll) {
+                Icon(Icons.Default.CheckCircle, contentDescription = "Select All")
+            }
+            IconButton(onClick = onRemove) {
+                Icon(Icons.Default.Delete, contentDescription = "Remove Selected")
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BookmarkedComicItem(
     comic: Comic,
-    onComicClick: () -> Unit,
-    onRemove: () -> Unit
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onComicClick() }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Box {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(2f / 3f),
+                    .aspectRatio(5f / 7f)
+                    .then(
+                        if (isSelected) Modifier.border(
+                            2.dp, 
+                            MaterialTheme.colorScheme.primary, 
+                            MaterialTheme.shapes.medium
+                        ) else Modifier
+                    ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
                 AsyncImage(
@@ -213,21 +308,22 @@ fun BookmarkedComicItem(
                     contentScale = ContentScale.Crop
                 )
             }
-            IconButton(
-                onClick = onRemove,
-                modifier = Modifier.align(Alignment.TopEnd)
-            ) {
+            
+            if (isSelected) {
                 Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = Color.Black.copy(alpha = 0.6f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Remove",
-                        tint = Color.White,
-                        modifier = Modifier.padding(4.dp).size(20.dp)
-                    )
-                }
+                    modifier = Modifier.matchParentSize(),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                    shape = MaterialTheme.shapes.medium
+                ) {}
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(24.dp)
+                        .align(Alignment.TopEnd)
+                )
             }
         }
         Spacer(modifier = Modifier.height(4.dp))
@@ -235,7 +331,7 @@ fun BookmarkedComicItem(
             text = comic.title,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
             maxLines = 1
         )
     }

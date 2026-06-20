@@ -85,42 +85,45 @@ fun ReaderScreen(
             }
             is ReaderUiState.Success -> {
                 if (chapterUri != null) {
-                    when (state.readingMode) {
-                        "LTR" -> {
-                            HorizontalReader(
-                                state = state,
-                                chapterUri = chapterUri!!,
-                                initialPage = currentPage,
-                                isRtl = false,
-                                onPageChange = { viewModel.saveProgress(it, state.pages.size) },
-                                onNextChapter = { viewModel.navigateToNextChapter() },
-                                onPrevChapter = { viewModel.navigateToPreviousChapter() },
-                                hasNext = viewModel.hasNextChapter(),
-                                hasPrev = viewModel.hasPreviousChapter()
-                            )
-                        }
-                        "RTL" -> {
-                            HorizontalReader(
-                                state = state,
-                                chapterUri = chapterUri!!,
-                                initialPage = currentPage,
-                                isRtl = true,
-                                onPageChange = { viewModel.saveProgress(it, state.pages.size) },
-                                onNextChapter = { viewModel.navigateToNextChapter() },
-                                onPrevChapter = { viewModel.navigateToPreviousChapter() },
-                                hasNext = viewModel.hasNextChapter(),
-                                hasPrev = viewModel.hasPreviousChapter()
-                            )
-                        }
-                        else -> {
-                            VerticalReader(
-                                state = state,
-                                chapterUri = chapterUri!!,
-                                initialPage = currentPage,
-                                onPageChange = { viewModel.saveProgress(it, state.pages.size) },
-                                onNextChapter = { viewModel.navigateToNextChapter() },
-                                hasNext = viewModel.hasNextChapter()
-                            )
+                    // key(chapterUri) memastikan state scroll/pager di-reset saat pindah chapter
+                    key(chapterUri) {
+                        when (state.readingMode) {
+                            "LTR" -> {
+                                HorizontalReader(
+                                    state = state,
+                                    chapterUri = chapterUri!!,
+                                    initialPage = currentPage,
+                                    isRtl = false,
+                                    onPageChange = { viewModel.saveProgress(it, state.pages.size) },
+                                    onNextChapter = { viewModel.navigateToNextChapter() },
+                                    onPrevChapter = { viewModel.navigateToPreviousChapter() },
+                                    hasNext = viewModel.hasNextChapter(),
+                                    hasPrev = viewModel.hasPreviousChapter()
+                                )
+                            }
+                            "RTL" -> {
+                                HorizontalReader(
+                                    state = state,
+                                    chapterUri = chapterUri!!,
+                                    initialPage = currentPage,
+                                    isRtl = true,
+                                    onPageChange = { viewModel.saveProgress(it, state.pages.size) },
+                                    onNextChapter = { viewModel.navigateToNextChapter() },
+                                    onPrevChapter = { viewModel.navigateToPreviousChapter() },
+                                    hasNext = viewModel.hasNextChapter(),
+                                    hasPrev = viewModel.hasPreviousChapter()
+                                )
+                            }
+                            else -> {
+                                VerticalReader(
+                                    state = state,
+                                    chapterUri = chapterUri!!,
+                                    initialPage = currentPage,
+                                    onPageChange = { viewModel.saveProgress(it, state.pages.size) },
+                                    onNextChapter = { viewModel.navigateToNextChapter() },
+                                    hasNext = viewModel.hasNextChapter()
+                                )
+                            }
                         }
                     }
                 }
@@ -196,7 +199,15 @@ fun VerticalReader(
         initialFirstVisibleItemIndex = (initialPage - 1).coerceAtLeast(0)
     )
 
-    // Save Progress
+    // Jump to page when initialPage changes (Slider sync)
+    LaunchedEffect(initialPage) {
+        val targetIndex = (initialPage - 1).coerceAtLeast(0)
+        if (listState.firstVisibleItemIndex != targetIndex) {
+            listState.scrollToItem(targetIndex)
+        }
+    }
+
+    // Save Progress (UI -> VM sync)
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .map { it + 1 }
@@ -214,13 +225,13 @@ fun VerticalReader(
             val layoutInfo = listState.layoutInfo
             if (layoutInfo.visibleItemsInfo.isEmpty()) return@derivedStateOf false
             val lastVisibleItem = layoutInfo.visibleItemsInfo.last()
-            lastVisibleItem.index == state.pages.size && hasNext
+            lastVisibleItem.index >= state.pages.size - 1 && hasNext
         }
     }
 
     LaunchedEffect(isAtEnd.value) {
         if (isAtEnd.value) {
-            onNextChapter()
+            // Kita bisa tambahkan delay atau interaksi user di sini di masa depan
         }
     }
 
@@ -244,15 +255,18 @@ fun VerticalReader(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp),
+                        .height(300.dp)
+                        .clickable { onNextChapter() },
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Color.Gray)
-                    Text(
-                        text = "Loading Next Chapter...",
-                        color = Color.Gray,
-                        modifier = Modifier.padding(top = 64.dp)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color.Gray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Tap to load Next Chapter",
+                            color = Color.Gray
+                        )
+                    }
                 }
             }
         }
@@ -279,6 +293,14 @@ fun HorizontalReader(
         initialPage = startIndex.coerceIn(0, totalCount - 1),
         pageCount = { totalCount }
     )
+
+    // Jump to page when initialPage changes (Slider sync)
+    LaunchedEffect(initialPage) {
+        val targetIndex = if (hasPrev) initialPage else initialPage - 1
+        if (pagerState.currentPage != targetIndex) {
+            pagerState.scrollToPage(targetIndex.coerceIn(0, totalCount - 1))
+        }
+    }
 
     // Sync Page and Save Progress + Auto Transition
     LaunchedEffect(pagerState.currentPage) {
@@ -312,12 +334,14 @@ fun HorizontalReader(
                 }
                 else -> {
                     val pageIdx = if (hasPrev) index - 1 else index
-                    val page = state.pages[pageIdx]
-                    ReaderPage(
-                        chapterUri = chapterUri,
-                        entryPath = page.entryPath,
-                        isVertical = false
-                    )
+                    if (pageIdx in state.pages.indices) {
+                        val page = state.pages[pageIdx]
+                        ReaderPage(
+                            chapterUri = chapterUri,
+                            entryPath = page.entryPath,
+                            isVertical = false
+                        )
+                    }
                 }
             }
         }

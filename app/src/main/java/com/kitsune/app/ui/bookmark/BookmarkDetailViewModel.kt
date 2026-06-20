@@ -19,6 +19,14 @@ class BookmarkDetailViewModel(
     private val _uiState = MutableStateFlow<BookmarkDetailUiState>(BookmarkDetailUiState.Loading)
     val uiState: StateFlow<BookmarkDetailUiState> = _uiState.asStateFlow()
 
+    // Selection Mode State
+    private val _selectedPaths = MutableStateFlow<Set<String>>(emptySet())
+    val selectedPaths: StateFlow<Set<String>> = _selectedPaths.asStateFlow()
+
+    val selectionMode: StateFlow<Boolean> = _selectedPaths
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     init {
         loadBookmarkDetail()
     }
@@ -50,13 +58,39 @@ class BookmarkDetailViewModel(
         }
     }
 
+    fun toggleSelection(path: String) {
+        val current = _selectedPaths.value
+        if (current.contains(path)) {
+            _selectedPaths.value = current - path
+        } else {
+            _selectedPaths.value = current + path
+        }
+    }
+
+    fun selectAll() {
+        val state = _uiState.value
+        if (state is BookmarkDetailUiState.Success) {
+            _selectedPaths.value = state.comics.map { it.relativePath }.toSet()
+        }
+    }
+
+    fun clearSelection() {
+        _selectedPaths.value = emptySet()
+    }
+
+    fun removeSelected() {
+        val paths = _selectedPaths.value.toList()
+        if (paths.isEmpty()) return
+        
+        viewModelScope.launch {
+            bookmarkRepository.removeComicsFromBookmark(bookmarkId, paths)
+            clearSelection()
+        }
+    }
+
     fun renameBookmark(newName: String) {
         viewModelScope.launch {
             bookmarkRepository.renameBookmark(bookmarkId, newName)
-            // The flow will automatically update the UI if the bookmark object was being observed, 
-            // but here we only have the name in Success state. 
-            // Since we use getBookmarkById once, we might need to refresh or observe the bookmark itself.
-            // For simplicity in MVP, we can just re-load or improve the flow.
         }
     }
 

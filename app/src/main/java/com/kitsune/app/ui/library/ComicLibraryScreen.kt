@@ -165,9 +165,9 @@ fun ComicGrid(
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(gridSize),
-        contentPadding = PaddingValues(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize()
     ) {
         items(comics) { comic ->
@@ -184,22 +184,27 @@ fun ComicCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(2f / 3f) // Standard 2:3 ratio
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Column {
-            AsyncImage(
-                model = comic.coverUri,
-                contentDescription = "Cover for ${comic.title}",
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                contentScale = ContentScale.Crop
-            )
+                    .aspectRatio(5f / 7f),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                AsyncImage(
+                    model = comic.coverUri,
+                    contentDescription = "Cover for ${comic.title}",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
             Text(
                 text = comic.title,
-                modifier = Modifier.padding(8.dp),
+                modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis

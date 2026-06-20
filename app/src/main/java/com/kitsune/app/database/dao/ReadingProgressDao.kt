@@ -20,4 +20,7 @@ interface ReadingProgressDao {
 
     @Query("DELETE FROM reading_progress WHERE comicRelativePath = :comicPath")
     suspend fun deleteProgress(comicPath: String)
+
+    @Query("SELECT * FROM reading_progress ORDER BY lastReadAt DESC LIMIT 1")
+    fun getLatestProgress(): Flow<ReadingProgressEntity?>
 }

@@ -32,11 +32,15 @@ class ComicDetailViewModel(
     private val _uiState = MutableStateFlow<ComicDetailUiState>(ComicDetailUiState.Loading)
     val uiState: StateFlow<ComicDetailUiState> = _uiState.asStateFlow()
 
-    private val _availableBookmarks = MutableStateFlow<List<BookmarkWithCount>>(emptyList())
-    val availableBookmarks: StateFlow<List<BookmarkWithCount>> = _availableBookmarks.asStateFlow()
+    private val _availableBookmarks = MutableStateFlow<List<BookmarkWithMembership>>(emptyList())
+    val availableBookmarks: StateFlow<List<BookmarkWithMembership>> = _availableBookmarks.asStateFlow()
 
     private val _availablePlaylists = MutableStateFlow<List<PlaylistWithCount>>(emptyList())
     val availablePlaylists: StateFlow<List<PlaylistWithCount>> = _availablePlaylists.asStateFlow()
+
+    val isBookmarked: StateFlow<Boolean> = bookmarkRepository.getBookmarkIdsForComic(comicRelativePath)
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     init {
         loadComicDetail()
@@ -76,20 +80,35 @@ class ComicDetailViewModel(
     }
 
     private fun loadAvailableCollections() {
-        viewModelScope.launch {
-            bookmarkRepository.getAllBookmarksWithCount().onEach { bookmarks ->
-                _availableBookmarks.value = bookmarks
-            }.launchIn(this)
+        // Gabungkan daftar semua bookmark dengan status membership komik ini
+        combine(
+            bookmarkRepository.getAllBookmarksWithCount(),
+            bookmarkRepository.getBookmarkIdsForComic(comicRelativePath)
+        ) { allBookmarks, memberIds ->
+            allBookmarks.map { bookmarkWithCount ->
+                BookmarkWithMembership(
+                    bookmark = bookmarkWithCount,
+                    isMember = memberIds.contains(bookmarkWithCount.bookmark.id)
+                )
+            }
+        }.onEach { 
+            _availableBookmarks.value = it 
+        }.launchIn(viewModelScope)
 
+        viewModelScope.launch {
             playlistRepository.getAllPlaylistsWithCount().onEach { playlists ->
                 _availablePlaylists.value = playlists
             }.launchIn(this)
         }
     }
 
-    fun addComicToBookmark(bookmarkId: Long) {
+    fun toggleBookmarkMembership(bookmarkId: Long, isMember: Boolean) {
         viewModelScope.launch {
-            bookmarkRepository.addComicToBookmark(bookmarkId, comicRelativePath)
+            if (isMember) {
+                bookmarkRepository.removeComicFromBookmark(bookmarkId, comicRelativePath)
+            } else {
+                bookmarkRepository.addComicToBookmark(bookmarkId, comicRelativePath)
+            }
         }
     }
 
@@ -99,6 +118,14 @@ class ComicDetailViewModel(
         }
     }
 }
+
+/**
+ * Model data untuk menampilkan status keanggotaan bookmark dalam dialog.
+ */
+data class BookmarkWithMembership(
+    val bookmark: BookmarkWithCount,
+    val isMember: Boolean
+)
 
 /**
  * Representasi State UI untuk layar Detail Komik.
