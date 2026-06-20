@@ -23,6 +23,7 @@ data class CbzPageModel(
 
 /**
  * Fetcher kustom untuk Coil yang melayani pemuatan gambar dari entri ZIP/CBZ.
+ * Memastikan stream ditutup dengan benar setelah diproses oleh Coil.
  */
 class CbzImageFetcher(
     private val context: Context,
@@ -34,14 +35,22 @@ class CbzImageFetcher(
         val inputStream = readerRepository.getPageStream(model.chapterUri, model.entryPath)
             ?: return null
 
-        return SourceResult(
-            source = ImageSource(
-                source = inputStream.source().buffer(),
-                context = context
-            ),
-            mimeType = null,
-            dataSource = DataSource.DISK
-        )
+        return try {
+            // SourceResult akan mengambil kepemilikan stream dan menutupnya
+            // saat ImageSource ditutup oleh ImageLoader.
+            SourceResult(
+                source = ImageSource(
+                    source = inputStream.source().buffer(),
+                    context = context
+                ),
+                mimeType = null,
+                dataSource = DataSource.DISK
+            )
+        } catch (e: Exception) {
+            // Jika gagal membuat SourceResult, pastikan stream ditutup secara manual
+            try { inputStream.close() } catch (ignored: Exception) {}
+            throw e
+        }
     }
 
     class Factory(

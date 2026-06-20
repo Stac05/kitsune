@@ -20,7 +20,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kitsune.app.data.repository.BookmarkWithCount
-import com.kitsune.app.data.repository.PlaylistWithCount
 import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.domain.model.Chapter
 import com.kitsune.app.domain.model.Comic
