@@ -45,6 +45,11 @@ class ScannerRepository(
      * Melakukan pemindaian inkremental pada folder komik.
      */
     suspend fun performIncrementalScan(rootUri: Uri) {
+        // STABILITY FIX: Proteksi agar tidak menghapus database jika folder kategori tidak ditemukan/error
+        if (!comicScanner.isCategoryFolderValid(rootUri, "Comics")) {
+            return
+        }
+
         val cachedComics = comicDao.getAllComicsSync()
         val cacheMap = cachedComics.associateBy { it.relativePath }
 
@@ -62,7 +67,12 @@ class ScannerRepository(
             .filter { it.relativePath !in scannedPaths }
             .map { it.relativePath }
 
-        val toInsert = scannedComics.map { it.toEntity() }
+        // OPTIMIZATION: Hanya masukkan komik yang baru atau yang datanya berubah
+        val toInsert = scannedComics.map { it.toEntity() }.filter { entity ->
+            val cached = cacheMap[entity.relativePath]
+            // Jika tidak ada di cache (baru) atau data berbeda (update), masukkan ke list
+            cached == null || cached != entity
+        }
 
         if (toInsert.isNotEmpty() || toDelete.isNotEmpty()) {
             comicDao.updateLibrary(toInsert, toDelete)

@@ -42,6 +42,9 @@ class CbzParser(private val context: Context) {
                     }
                 }
             }
+        } catch (e: SecurityException) {
+            // STABILITY FIX: Tangani jika permission dicabut saat proses scan
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
             return@withContext emptyList()
@@ -64,26 +67,29 @@ class CbzParser(private val context: Context) {
 
     /**
      * Membuka InputStream untuk entri spesifik di dalam file CBZ.
-     * PENTING: ZipInputStream tidak mendukung random access dengan efisien.
-     * Kita harus melakukan iterasi sampai menemukan entri yang dimaksud.
      */
     fun getEntryInputStream(chapterUri: Uri, entryPath: String): InputStream? {
-        val inputStream = context.contentResolver.openInputStream(chapterUri) ?: return null
-        val zipStream = ZipInputStream(inputStream)
-        
-        var entry = zipStream.nextEntry
-        while (entry != null) {
-            if (entry.name == entryPath) {
-                // Jangan menutup zipStream di sini karena pemanggil butuh stream-nya.
-                // Namun ini berisiko leak jika tidak dikelola dengan baik.
-                return zipStream
+        return try {
+            val inputStream = context.contentResolver.openInputStream(chapterUri) ?: return null
+            val zipStream = ZipInputStream(inputStream)
+            
+            var entry = zipStream.nextEntry
+            while (entry != null) {
+                if (entry.name == entryPath) {
+                    return zipStream
+                }
+                zipStream.closeEntry()
+                entry = zipStream.nextEntry
             }
-            zipStream.closeEntry()
-            entry = zipStream.nextEntry
+            
+            zipStream.close()
+            null
+        } catch (e: SecurityException) {
+            // STABILITY FIX: Tangani SecurityException agar tidak crash mendadak
+            throw e
+        } catch (e: Exception) {
+            null
         }
-        
-        zipStream.close()
-        return null
     }
 
     private data class RawPageEntry(val name: String)

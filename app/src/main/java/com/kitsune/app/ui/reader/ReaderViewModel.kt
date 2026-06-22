@@ -74,7 +74,10 @@ class ReaderViewModel(
 
                 val uri = chapterDoc.uri
                 _chapterUri.value = uri
-                val pages = readerRepository.getPages(uri)
+                
+                // OPTIMIZATION: Gunakan cacheKey (path + lastModified) untuk menghindari parsing ulang ZIP
+                val cacheKey = "${chapterPath}:${chapterDoc.lastModified()}"
+                val pages = readerRepository.getPages(uri, cacheKey)
                 
                 if (pages.isEmpty()) {
                     _uiState.value = ReaderUiState.Empty

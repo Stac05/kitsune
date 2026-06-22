@@ -139,7 +139,7 @@ fun MainContainer(
         BottomNavItem("Bookmark", Screen.Bookmark.route, Icons.Default.Star),
         BottomNavItem("Playlist", Screen.Playlist.route, Icons.AutoMirrored.Filled.List),
         BottomNavItem("Local", Screen.Local.route, Icons.Default.Home),
-        BottomNavItem("Other", Screen.Other.route, Icons.Default.Settings),
+        BottomNavItem("Settings", Screen.Other.route, Icons.Default.Settings),
     )
 
     Scaffold(

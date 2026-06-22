@@ -1,4 +1,4 @@
-# Kitsune - UI Specification (v0.2)
+# Kitsune - UI Specification (v1.0)
 
 ## Purpose
 
@@ -21,6 +21,10 @@ Dokumen ini mendefinisikan seluruh UI resmi Kitsune menggunakan Jetpack Compose.
 - **Grid System:** Configurable (2, 3, 4 columns). Default: 3.
 - **Cover Ratio:** 2:3 untuk komik dan poster video.
 - **Touch Target:** Minimum 48dp untuk elemen interaktif.
+- **Icons:**
+    - Comics: `Icons.Default.Book`
+    - Videos: `Icons.Default.PlayArrow`
+    - Selection: `Icons.Default.CheckCircle`
 
 ---
 
@@ -41,7 +45,7 @@ Dokumen ini mendefinisikan seluruh UI resmi Kitsune menggunakan Jetpack Compose.
 
 Menampilkan dua bagian utama:
 1. **Last Read:** Card besar berisi komik terakhir, progress (halaman/chapter), dan tombol lanjut.
-2. **Library Shortcuts:** Tombol cepat menuju "Comics" dan "Videos".
+2. **Library Shortcuts:** Tombol cepat menuju "Comics" (Icon: Book) dan "Videos" (Icon: PlayArrow).
 
 ---
 
@@ -50,15 +54,16 @@ Menampilkan dua bagian utama:
 - **Grid View:** Menampilkan cover komik.
 - **Natural Sorting:** Daftar komik diurutkan secara alfabetis menggunakan logika Natural Sort.
 - **Search:** Filter instan berdasarkan judul folder.
+- **Empty State:** Jika hasil pencarian tidak ditemukan, tampilkan icon `SearchOff` dengan pesan "No results for...".
 
 ---
 
 # Comic Detail Screen
 
-- **Header:** Cover (blur background), Judul, dan Metadata (jika ada).
-- **Action Buttons:** Read (Resume/Start), Favorite, Bookmark, Playlist.
+- **Header:** Cover, Judul, dan Metadata library.
+- **Action Buttons:** Continue Reading (jika ada progres), Bookmark, Playlist.
 - **Chapter List:** Menampilkan daftar file `.cbz`.
-    - **Natural Sorting:** Chapter 2 tampil sebelum Chapter 10.
+    - **Natural Sorting:** Urutan numerik yang tepat.
     - **Display Name:** Tanpa ekstensi `.cbz`.
 
 ---
@@ -66,29 +71,35 @@ Menampilkan dua bagian utama:
 # Reader Screen
 
 - **Reading Area:** Menampilkan gambar manga sesuai mode (Vertical, LTR, RTL).
-- **Top Bar (Auto-hide):** Judul dan nomor chapter.
-- **Bottom Bar (Auto-hide):**
-    - **Page Slider:** Untuk navigasi cepat.
-    - **Page Counter:** `Current / Total`.
-    - **Chapter Nav:** Tombol Next/Prev chapter.
+- **Overlay Controls (Auto-hide):** 
+    - **Top Bar:** Judul chapter dan navigasi balik.
+    - **Bottom Bar:** Page Slider (Current/Total) dan tombol navigasi antar chapter.
 
 ---
 
-# Settings (Other) Screen
+# Collections (Bookmark & Playlist)
 
-- **Library Section:**
-    - `rootFolderUri` display (Shortened path).
-    - Tombol "Change Root Folder" (Akan memicu SAF Picker ulang).
-    - Tombol "Rescan Library".
-- **Reading Section:** Reading Mode, Auto Next Chapter.
-- **Appearance:** Dark Mode, OLED Black, Grid Size.
+- **Grid View:** Menampilkan kategori koleksi.
+- **Selection Mode:** Diaktifkan via Long-press.
+    - Mendukung seleksi massal kategori untuk penghapusan.
+    - Mendukung seleksi massal item di dalam kategori untuk "Bulk Remove".
+    - Indikator seleksi menggunakan `CheckCircle` dan border aksen oranye.
+
+---
+
+# Settings Screen
+
+- **Library Section:** Management Root Folder dan Rescan Library.
+- **Reading Section:** Reading Mode (Vertical, LTR, RTL).
+- **Appearance:** Grid Size (2, 3, 4), Dark Mode, OLED Black.
+- **About:** Informasi versi dan branding.
 
 ---
 
 # UI Decision Summary
 
 1. Dark Theme + Orange Accent.
-2. Splash menangani pemilihan Root Folder via SAF.
-3. Natural Sorting diterapkan pada semua list (Library & Chapters).
-4. Cover ratio 2:3.
-5. Grid size dapat diatur (2, 3, 4).
+2. Icon spesifik untuk Comics (Book) dan Videos (PlayArrow).
+3. Selection Mode untuk manajemen koleksi massal.
+4. Natural Sorting pada semua list.
+5. Search dengan visual Empty State (SearchOff icon).

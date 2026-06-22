@@ -1,4 +1,4 @@
-# Kitsune - Task Roadmap (v0.2)
+# Kitsune - Task Roadmap (v1.0 Stable Candidate)
 
 ## Purpose
 
@@ -6,100 +6,73 @@ Dokumen ini mendefinisikan urutan pengerjaan resmi Kitsune berdasarkan arsitektu
 
 ---
 
-# Development Phases
+# Completed Phases
 
-```text
-Phase 0 - Project Setup
-Phase 1 - Core Infrastructure (SAF & Database)
-Phase 2 - Library System (Scanner)
-Phase 3 - Reader Engine (Natural Sorting)
-Phase 4 - Bookmark & Playlist
-Phase 5 - Settings & Polish
-Phase 6 - Optimization
-Phase 7 - Video Support
-```
+## Phase 0: Project Setup [DONE]
+- Setup Min SDK 26, Target SDK 35.
+- Package structure: core, data, domain, ui, reader, scanner.
+
+## Phase 1: Core Infrastructure [DONE]
+- Storage Helper: SAF Picker, URI Persistence.
+- Settings System: `SettingsEntity` & `SettingsRepository`.
+- Initialization: Auto-create `/Kitsune` subfolders.
+- Navigation: Navigation Compose with URL Encoding support.
+- Splash Screen: Permission check flow.
+
+## Phase 2: Library System [DONE]
+- Scanner Engine: `DocumentFile` scanning with Relative Path mapping.
+- Natural Sorting: `NaturalOrderComparator` implementation.
+- Incremental Scan: `lastModified` check logic.
+- UI: Comic Library Grid with cover detection.
+
+## Phase 3: Reader Engine [DONE]
+- Comic Detail: Chapter list with Natural Sorting.
+- CBZ Parser: Streaming image via `ZipInputStream`.
+- Reader UI: Vertical, LTR, RTL modes.
+- Progress System: Save progress via `ReadingProgressRepository`.
+- Auto Transition: Navigate chapters using Natural Sorting.
+
+## Phase 4: Bookmark & Playlist [DONE]
+- Data Layer: Room entities with `comicRelativePath` foreign keys.
+- UI: CRUD Bookmark & Playlist with selection mode.
+
+## Phase 5: Settings & Polish [DONE]
+- Reading Settings: Mode, Grid Size, Theme (OLED).
+- Appearance: Dark Mode support.
+- UX: Consisten naming "Settings" and descriptive icons.
+
+## Phase 6: Optimization & Stability [DONE]
+- **6.2A Room Write Optimization:** Filter redundant database writes.
+- **6.2B1 Folder Cache:** Memory cache for frequently accessed `DocumentFile`.
+- **6.3B1 Reader Metadata Cache:** `pageCache` for CBZ page lists.
+- **6.5.1 Stability Fixes:** 
+    - Library Wipe-out Protection.
+    - `SecurityException` handling in Reader.
+- **6.5.3A Cleanup:** Dead code & Placeholder removal.
 
 ---
 
-# Phase 0: Project Setup
+# Current Milestone: Release v1.0 Stable
 
 ## Tasks
-- **Android Project:** Setup Min SDK 26, Target SDK Stable.
-- **Dependencies:** Compose, Room, Navigation Compose, Coil, Activity-Ktx.
-- **Package Structure:** Setup core, data, domain, ui, reader, scanner.
+- [ ] R8/ProGuard configuration (minifyEnabled).
+- [ ] Final APK size validation.
+- [ ] Documentation finalization.
 
 ---
 
-# Phase 1: Core Infrastructure
+# Future Roadmap
 
-## Tasks
-- **Storage Helper:** Implementasi SAF Picker, URI Persistence, dan `DocumentFile` utilities.
-- **Settings System:** Entity untuk menyimpan `rootFolderUri`.
-- **Initialization:** Logic untuk membuat folder `/Kitsune/Comics` dan `/Kitsune/Videos` via SAF.
-- **Navigation:** Setup Navigation Graph dengan dukungan URL Encoding untuk Relative Path.
-- **Splash Screen:** Flow pengecekan permission SAF.
+## Phase 7: Video Support
+- Video Scanner: Detection of video files and posters.
+- Video Library UI: Grid for video content.
+- Video Player: Media3 integration.
+- Video Progress: Resume playback support.
 
----
+## Phase 8: Backup & Restore
+- Database Export: Export Room data to `/Backup` folder.
+- Database Import: Restore metadata from backup file.
 
-# Phase 2: Library System
-
-## Tasks
-- **Scanner Engine:** Implementasi `DocumentFile` scanning dengan Relative Path mapping.
-- **Natural Sorting:** Implementasi helper untuk Natural Sorting (alfabet + numerik).
-- **Incremental Scan:** Logic perbandingan `lastModified`.
-- **UI:** Comic Library Grid dengan cover detection (jpg, jpeg, png, webp).
-
----
-
-# Phase 3: Reader Engine
-
-## Tasks
-- **Comic Detail:** Chapter list dengan Natural Sorting.
-- **CBZ Parser:** Streaming image via `ContentResolver`.
-- **Reader UI:** Vertical, LTR, RTL modes.
-- **Progress System:** Simpan progress berdasarkan Relative Path chapter.
-- **Auto Transition:** Navigasi antar chapter menggunakan Natural Sorting.
-
----
-
-# Phase 4: Bookmark & Playlist
-
-## Tasks
-- **Data Layer:** Implementasi Bookmark/Playlist menggunakan `comicRelativePath`.
-- **UI:** CRUD Bookmark & Playlist.
-
----
-
-# Phase 5: Settings & Polish
-
-## Tasks
-- **Reading Settings:** Mode, Auto Next.
-- **Appearance:** Grid Size, Dark Mode, OLED Black.
-- **Library:** Change Root Folder (SAF Re-picker).
-
----
-
-# Phase 6: Optimization
-
-## Tasks
-- **SAF Performance:** Optimasi pemindaian `DocumentFile`.
-- **Memory:** Coil memory management untuk image resolusi tinggi.
-
----
-
-# Phase 7: Video Support
-
-- **Video Scanner:** Deteksi video dan poster.
-- **Player:** Media3 integration (Future).
-
----
-
-# Roadmap Summary
-
-1. Setup Project (Min SDK 26).
-2. Infrastructure (SAF & Root Selection).
-3. Library (Scanner & Natural Sort).
-4. Reader (CBZ Streaming & Progress).
-5. Bookmark & Playlist (Relative ID).
-6. Settings & Polish.
-7. Optimization.
+## Phase 9: Metadata & Polish
+- External Metadata: Support for `info.json` or `comic.json`.
+- UI Enhancements: Advanced animations and custom accent colors.
