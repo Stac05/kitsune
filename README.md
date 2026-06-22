@@ -100,16 +100,4 @@ The reader extracts images directly from `.cbz` files using `ZipInputStream`.
 3. **Filesystem is Truth:** Do not store chapter or page lists in the database; read them from the filesystem lazily.
 4. **SAF Stewardship:** Always handle URI persistence and `SecurityException` gracefully.
 
-## 14. Documentation Index
-- [AI_AGENT_CONTEXT.md](AI_AGENT_CONTEXT.md): Main entry point for AI agents. Core rules and MVP scope.
-- [PROJECT_STATUS.md](PROJECT_STATUS.md): Current development state and optimization history.
-- [architecture.md](architecture.md): Technical architecture and module responsibilities.
-- [filesystem.md](filesystem.md): Specification for folder and file structures.
-- [database.md](database.md): Room database schema and entity relations.
-- [navigation.md](navigation.md): Navigation routes and URL encoding strategy.
-- [ui-spec.md](ui-spec.md): Design principles, icons, and UI component behavior.
-- [reader-engine.md](reader-engine.md): Detailed logic of the CBZ parsing and reading flow.
-- [scanner-engine.md](scanner-engine.md): Incremental scanning and storage optimization logic.
-- [project-rules.md](project-rules.md): Absolute project rules and coding standards.
-- [task-roadmap.md](task-roadmap.md): Historical progress and upcoming milestones.
-- [branding.md](branding.md): Official assets and visual identity rules.
+
