@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 
 /**
  * ViewModel untuk mengelola logika layar Reader.
- * Mendukung pembacaan progres, pemantauan pengaturan mode baca, dan navigasi antar chapter.
+ * Mendukung pembacaan progres per chapter, pemantauan pengaturan mode baca, dan navigasi antar chapter.
  */
 class ReaderViewModel(
     private val comicRelativePath: String,
@@ -83,12 +83,11 @@ class ReaderViewModel(
                     _uiState.value = ReaderUiState.Empty
                 } else {
                     currentChapterPath = chapterPath
-                    val savedProgress = progressRepository.getProgressByComicSync(comicRelativePath)
-                    val startPage = if (savedProgress != null && savedProgress.chapterRelativePath == chapterPath) {
-                        savedProgress.pageNumber.coerceIn(1, pages.size)
-                    } else {
-                        1
-                    }
+                    
+                    // REVISION: Ambil progres spesifik untuk chapter ini
+                    val savedProgress = progressRepository.getProgressByChapterSync(chapterPath)
+                    val startPage = savedProgress?.pageNumber?.coerceIn(1, pages.size) ?: 1
+                    
                     _currentPage.value = startPage
 
                     // Remove .cbz extension (case-insensitive)
@@ -105,6 +104,7 @@ class ReaderViewModel(
                         readingMode = readingMode
                     )
                     
+                    // Simpan/Update lastReadAt agar Continue Reading mengarah ke sini
                     saveProgress(startPage, pages.size)
                 }
             } catch (e: Exception) {

@@ -9,11 +9,23 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ReadingProgressDao {
-    @Query("SELECT * FROM reading_progress WHERE comicRelativePath = :comicPath LIMIT 1")
+    /**
+     * Mendapatkan progres terakhir dibaca untuk komik tertentu (chapter terbaru).
+     */
+    @Query("SELECT * FROM reading_progress WHERE comicRelativePath = :comicPath ORDER BY lastReadAt DESC LIMIT 1")
     fun getProgressByComic(comicPath: String): Flow<ReadingProgressEntity?>
 
-    @Query("SELECT * FROM reading_progress WHERE comicRelativePath = :comicPath LIMIT 1")
+    /**
+     * Mendapatkan progres terakhir dibaca untuk komik tertentu secara sinkron.
+     */
+    @Query("SELECT * FROM reading_progress WHERE comicRelativePath = :comicPath ORDER BY lastReadAt DESC LIMIT 1")
     suspend fun getProgressByComicSync(comicPath: String): ReadingProgressEntity?
+
+    /**
+     * Mendapatkan progres spesifik untuk sebuah chapter.
+     */
+    @Query("SELECT * FROM reading_progress WHERE chapterRelativePath = :chapterPath LIMIT 1")
+    suspend fun getProgressByChapterSync(chapterPath: String): ReadingProgressEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveProgress(progress: ReadingProgressEntity)
@@ -21,6 +33,9 @@ interface ReadingProgressDao {
     @Query("DELETE FROM reading_progress WHERE comicRelativePath = :comicPath")
     suspend fun deleteProgress(comicPath: String)
 
+    /**
+     * Mendapatkan progres paling baru secara global (untuk Continue Reading di Home).
+     */
     @Query("SELECT * FROM reading_progress ORDER BY lastReadAt DESC LIMIT 1")
     fun getLatestProgress(): Flow<ReadingProgressEntity?>
 }

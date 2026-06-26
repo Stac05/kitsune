@@ -19,21 +19,30 @@ class ReadingProgressRepository(
 ) {
 
     /**
-     * Mendapatkan aliran data progres untuk sebuah komik.
+     * Mendapatkan aliran data progres untuk sebuah komik (chapter terakhir yang dibuka).
      */
     fun getProgressByComic(comicPath: String): Flow<ReadingProgressEntity?> {
         return readingProgressDao.getProgressByComic(comicPath)
     }
 
     /**
-     * Mendapatkan progres komik secara sinkron (suspend).
+     * Mendapatkan progres komik (chapter terakhir) secara sinkron.
      */
     suspend fun getProgressByComicSync(comicPath: String): ReadingProgressEntity? {
         return readingProgressDao.getProgressByComicSync(comicPath)
     }
 
     /**
+     * Mendapatkan progres spesifik untuk sebuah chapter secara sinkron.
+     */
+    suspend fun getProgressByChapterSync(chapterPath: String): ReadingProgressEntity? {
+        return readingProgressDao.getProgressByChapterSync(chapterPath)
+    }
+
+    /**
      * Menyimpan atau memperbarui progres membaca.
+     * Karena menggunakan composite unique index, ini akan meng-update progress chapter jika sudah ada,
+     * atau membuat entri baru jika belum ada.
      */
     suspend fun saveProgress(
         comicRelativePath: String,
@@ -59,7 +68,7 @@ class ReadingProgressRepository(
     }
 
     /**
-     * Mendapatkan progres membaca terbaru yang digabungkan dengan data komik.
+     * Mendapatkan progres membaca terbaru secara global yang digabungkan dengan data komik.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getLatestReadComic(): Flow<LastReadComic?> {

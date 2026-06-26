@@ -6,11 +6,14 @@ import androidx.room.PrimaryKey
 
 /**
  * Entity untuk menyimpan progres membaca komik.
- * Menggunakan relative path sebagai identifier unik.
+ * Menggunakan composite relative path (comic + chapter) sebagai identifier unik
+ * agar setiap chapter memiliki progres masing-masing.
  */
 @Entity(
     tableName = "reading_progress",
-    indices = [Index(value = ["comicRelativePath"], unique = true)]
+    indices = [
+        Index(value = ["comicRelativePath", "chapterRelativePath"], unique = true)
+    ]
 )
 data class ReadingProgressEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
