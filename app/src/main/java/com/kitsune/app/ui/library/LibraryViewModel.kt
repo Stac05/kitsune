@@ -10,6 +10,7 @@ import com.kitsune.app.data.repository.SettingsRepository
 import com.kitsune.app.domain.model.Comic
 import com.kitsune.app.database.entity.BookmarkEntity
 import com.kitsune.app.database.entity.PlaylistEntity
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -28,6 +29,14 @@ class LibraryViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    /**
+     * Optimasi pencarian untuk mencegah recomputation berlebih saat user mengetik.
+     */
+    @OptIn(FlowPreview::class)
+    private val debouncedSearchQuery = _searchQuery
+        .debounce(300)
+        .distinctUntilChanged()
 
     // Selection State
     private val _selectedPaths = MutableStateFlow<Set<String>>(emptySet())
@@ -65,49 +74,62 @@ class LibraryViewModel(
         .map { list -> list.map { it.playlist } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val uiState: StateFlow<LibraryUiState> = combine(
+    /**
+     * Tahap 1: Filtering Komik.
+     * Hanya dijalankan jika daftar komik atau query pencarian berubah.
+     */
+    private val filteredComics = combine(
         scannerRepository.allComics,
-        settingsRepository.settings,
-        _isRefreshing,
-        _errorMessage,
-        _searchQuery,
-        bookmarkedPaths,
-        playlistPaths
-    ) { array ->
-        val comics = array[0] as List<Comic>
-        val settings = array[1] as com.kitsune.app.database.entity.SettingsEntity?
-        val refreshing = array[2] as Boolean
-        val error = array[3] as String?
-        val query = array[4] as String
-        val bookmarks = array[5] as Set<String>
-        val playlists = array[6] as Set<String>
-
-        val gridSize = settings?.gridSize ?: 3
-        
-        val filteredComics = if (query.isBlank()) {
+        debouncedSearchQuery
+    ) { comics, query ->
+        if (query.isBlank()) {
             comics
         } else {
             comics.filter { comic ->
                 comic.title.contains(query, ignoreCase = true)
             }
         }
+    }.distinctUntilChanged()
 
-        // Build status map for filtered comics
-        val statusMap = filteredComics.associate { comic ->
+    /**
+     * Tahap 2: Mapping Status Visual.
+     * Hanya dijalankan jika hasil filter berubah atau status keanggotaan koleksi berubah.
+     */
+    private val comicStatuses = combine(
+        filteredComics,
+        bookmarkedPaths,
+        playlistPaths
+    ) { comics, bookmarks, playlists ->
+        comics.associate { comic ->
             val path = comic.relativePath
             val statuses = mutableSetOf<ComicStatus>()
             if (bookmarks.contains(path)) statuses.add(ComicStatus.BOOKMARKED)
             if (playlists.contains(path)) statuses.add(ComicStatus.IN_PLAYLIST)
             path to statuses.toSet()
         }
+    }.distinctUntilChanged()
+
+    /**
+     * Tahap 3: Perakitan Final UI State.
+     * Memisahkan logic berat (filter/map) dari logic UI ringan (gridSize, refreshing).
+     */
+    val uiState: StateFlow<LibraryUiState> = combine(
+        filteredComics,
+        comicStatuses,
+        settingsRepository.settings,
+        _isRefreshing,
+        _errorMessage
+    ) { comics, statuses, settings, refreshing, error ->
+        val gridSize = settings?.gridSize ?: 3
+        val query = _searchQuery.value
 
         when {
             error != null -> LibraryUiState.Error(error)
-            refreshing && filteredComics.isEmpty() && query.isBlank() -> LibraryUiState.Loading
-            filteredComics.isEmpty() -> LibraryUiState.Empty
+            refreshing && comics.isEmpty() && query.isBlank() -> LibraryUiState.Loading
+            comics.isEmpty() -> LibraryUiState.Empty
             else -> LibraryUiState.Success(
-                comics = filteredComics,
-                comicStatuses = statusMap,
+                comics = comics,
+                comicStatuses = statuses,
                 isRefreshing = refreshing,
                 gridSize = gridSize
             )

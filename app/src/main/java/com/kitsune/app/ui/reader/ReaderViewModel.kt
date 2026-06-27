@@ -10,16 +10,8 @@ import com.kitsune.app.data.repository.ReadingProgressRepository
 import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
 import com.kitsune.app.domain.model.Chapter
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-
-/**
- * State untuk transisi antar chapter agar tidak terjadi blank screen.
- */
-data class ChapterTransitionState(
-    val chapterTitle: String = "",
-    val isTransitioning: Boolean = false
-)
 
 /**
  * ViewModel untuk mengelola logika layar Reader.
@@ -38,9 +30,6 @@ class ReaderViewModel(
     private val _uiState = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
-    private val _transitionState = MutableStateFlow(ChapterTransitionState())
-    val transitionState: StateFlow<ChapterTransitionState> = _transitionState.asStateFlow()
-
     private var _chapterUri = MutableStateFlow<Uri?>(null)
     val chapterUri: StateFlow<Uri?> = _chapterUri.asStateFlow()
 
@@ -50,6 +39,16 @@ class ReaderViewModel(
     private var chapters: List<Chapter> = emptyList()
     private var currentChapterIndex: Int = -1
 
+    // OPTIMIZATION: Reading Progress Debounce (Phase 6.6.4.1)
+    private var debounceSaveJob: Job? = null
+    private var pendingProgressUpdate: ProgressUpdate? = null
+
+    private data class ProgressUpdate(
+        val pageNumber: Int,
+        val totalPages: Int,
+        val chapterPath: String
+    )
+
     init {
         loadChapter(currentChapterPath)
         observeSettings()
@@ -57,18 +56,15 @@ class ReaderViewModel(
 
     private fun loadChapter(chapterPath: String) {
         viewModelScope.launch {
+            // Force save progres chapter sebelumnya secara sinkron (suspend) sebelum pindah
+            forceSaveSync()
+
             val isInitialLoad = _uiState.value !is ReaderUiState.Success
             
-            // Bersihkan nama chapter untuk transition overlay
             val targetChapterName = chapterPath.substringAfterLast('/').removeSuffix(".cbz")
             
             if (isInitialLoad) {
                 _uiState.value = ReaderUiState.Loading
-            } else {
-                _transitionState.value = ChapterTransitionState(
-                    chapterTitle = targetChapterName,
-                    isTransitioning = true
-                )
             }
 
             try {
@@ -92,7 +88,6 @@ class ReaderViewModel(
 
                 if (chapterDoc == null || !chapterDoc.exists()) {
                     _uiState.value = ReaderUiState.Error("Chapter file not found")
-                    _transitionState.value = ChapterTransitionState(isTransitioning = false)
                     return@launch
                 }
 
@@ -117,14 +112,13 @@ class ReaderViewModel(
                         readingMode = readingMode
                     )
                     
+                    // Initial save untuk posisi awal di chapter baru
                     saveProgress(startPage, pages.size)
                 }
             } catch (e: Exception) {
                 if (isInitialLoad) {
                     _uiState.value = ReaderUiState.Error("Failed to load chapter: ${e.message}")
                 }
-            } finally {
-                _transitionState.value = ChapterTransitionState(isTransitioning = false)
             }
         }
     }
@@ -142,16 +136,82 @@ class ReaderViewModel(
             .launchIn(viewModelScope)
     }
 
+    /**
+     * Menyimpan progres membaca dengan mekanisme debounce.
+     * Menggunakan structured concurrency via finally block untuk memastikan penyimpanan saat pembatalan.
+     */
     fun saveProgress(pageNumber: Int, totalPages: Int) {
         _currentPage.value = pageNumber
-        viewModelScope.launch {
+        
+        val update = ProgressUpdate(
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            chapterPath = currentChapterPath
+        )
+        pendingProgressUpdate = update
+
+        debounceSaveJob?.cancel()
+        debounceSaveJob = viewModelScope.launch {
+            try {
+                delay(1000L) // Debounce 1 detik
+                performSave(update)
+                pendingProgressUpdate = null // Berhasil disimpan
+            } finally {
+                // Structured Concurrency: Jika coroutine dibatalkan (misal ViewModel hancur)
+                // dan masih ada progres tertunda, simpan menggunakan NonCancellable.
+                if (pendingProgressUpdate != null && !isActive) {
+                    val lastUpdate = pendingProgressUpdate!!
+                    pendingProgressUpdate = null
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        performSave(lastUpdate)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Memaksa penyimpanan progres secara sinkron (suspend).
+     * Digunakan saat perpindahan chapter agar chapter sebelumnya tersimpan sebelum memuat yang baru.
+     */
+    private suspend fun forceSaveSync() {
+        val update = pendingProgressUpdate ?: return
+        pendingProgressUpdate = null // Ambil kepemilikan update
+        debounceSaveJob?.cancelAndJoin()
+        performSave(update)
+    }
+
+    /**
+     * Memaksa penyimpanan progres secara asinkron.
+     * Digunakan oleh UI layer untuk flush data saat aplikasi masuk ke background atau user keluar.
+     */
+    fun forceSaveAsync() {
+        val update = pendingProgressUpdate ?: return
+        pendingProgressUpdate = null // Ambil kepemilikan update
+        debounceSaveJob?.cancel()
+        // Jalankan di scope ViewModel dengan NonCancellable agar tetap jalan meskipun scope dibatalkan sesaat kemudian.
+        viewModelScope.launch(Dispatchers.IO + NonCancellable) {
+            performSave(update)
+        }
+    }
+
+    private suspend fun performSave(update: ProgressUpdate) {
+        try {
             progressRepository.saveProgress(
                 comicRelativePath = comicRelativePath,
-                chapterRelativePath = currentChapterPath,
-                pageNumber = pageNumber,
-                totalPages = totalPages
+                chapterRelativePath = update.chapterPath,
+                pageNumber = update.pageNumber,
+                totalPages = update.totalPages
             )
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
+    }
+
+    override fun onCleared() {
+        // Debounce job akan menangani force save terakhirnya sendiri di block finally 
+        // berkat pengecekan !isActive and NonCancellable.
+        super.onCleared()
     }
 
     fun navigateToNextChapter() {

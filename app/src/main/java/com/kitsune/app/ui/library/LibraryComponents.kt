@@ -38,7 +38,6 @@ import com.kitsune.app.domain.model.Comic
 
 /**
  * Representasi status komik untuk indikator visual.
- * Arsitektur ini scalable untuk penambahan status di masa depan (Reading, Completed, dll).
  */
 enum class ComicStatus {
     BOOKMARKED,
@@ -47,7 +46,9 @@ enum class ComicStatus {
 
 /**
  * Metadata UI untuk sebuah kartu komik.
+ * Anotasi Immutable memastikan Compose dapat melewati recomposition jika data identik.
  */
+@Immutable
 data class ComicCardState(
     val isSelected: Boolean = false,
     val statuses: Set<ComicStatus> = emptySet()
@@ -56,6 +57,7 @@ data class ComicCardState(
 /**
  * Representasi aksi pada Selection Mode yang reusable.
  */
+@Immutable
 data class SelectionAction(
     val icon: ImageVector,
     val label: String,
@@ -151,17 +153,22 @@ fun ComicCard(
  */
 @Composable
 private fun StatusBadgeIcon(status: ComicStatus) {
-    val (icon, tint, description) = when (status) {
-        ComicStatus.BOOKMARKED -> Triple(
-            Icons.Default.Bookmark,
-            MaterialTheme.colorScheme.primary,
-            "Bookmarked"
-        )
-        ComicStatus.IN_PLAYLIST -> Triple(
-            Icons.AutoMirrored.Filled.List,
-            Color(0xFF4CAF50), // Green for Playlist
-            "In Playlist"
-        )
+    // Avoid object allocation (Triple) by using local constants
+    val icon: ImageVector
+    val tint: Color
+    val description: String
+
+    when (status) {
+        ComicStatus.BOOKMARKED -> {
+            icon = Icons.Default.Bookmark
+            tint = MaterialTheme.colorScheme.primary
+            description = "Bookmarked"
+        }
+        ComicStatus.IN_PLAYLIST -> {
+            icon = Icons.AutoMirrored.Filled.List
+            tint = Color(0xFF4CAF50)
+            description = "In Playlist"
+        }
     }
 
     Surface(
@@ -179,7 +186,7 @@ private fun StatusBadgeIcon(status: ComicStatus) {
 }
 
 /**
- * Grid Komik Reusable.
+ * Grid Komik Reusable dengan optimasi performa tinggi.
  */
 @Composable
 fun ComicGrid(
@@ -199,16 +206,34 @@ fun ComicGrid(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        items(comics, key = { it.relativePath }) { comic ->
-            val cardState = ComicCardState(
-                isSelected = selectedPaths.contains(comic.relativePath),
-                statuses = comicStatuses[comic.relativePath] ?: emptySet()
-            )
+        items(
+            items = comics, 
+            key = { it.relativePath },
+            contentType = { "comic" }
+        ) { comic ->
+            // Optimize lookup and state allocation
+            val isSelected = remember(selectedPaths, comic.relativePath) {
+                selectedPaths.contains(comic.relativePath)
+            }
+            val statuses = remember(comicStatuses, comic.relativePath) {
+                comicStatuses[comic.relativePath] ?: emptySet()
+            }
+            val cardState = remember(isSelected, statuses) {
+                ComicCardState(isSelected, statuses)
+            }
+
+            // Stable lambdas to prevent redundant card recompositions
+            val currentOnComicClick by rememberUpdatedState(onComicClick)
+            val currentOnComicLongClick by rememberUpdatedState(onComicLongClick)
+            
+            val onClick = remember(comic) { { currentOnComicClick(comic) } }
+            val onLongClick = remember(comic) { { currentOnComicLongClick(comic) } }
+
             ComicCard(
                 comic = comic,
                 state = cardState,
-                onClick = { onComicClick(comic) },
-                onLongClick = { onComicLongClick(comic) }
+                onClick = onClick,
+                onLongClick = onLongClick
             )
         }
     }
@@ -331,7 +356,11 @@ fun CollectionPickerDialog(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(collections) { (id, name) ->
+                    items(
+                        items = collections,
+                        key = { it.first },
+                        contentType = { "category" }
+                    ) { (id, name) ->
                         val isSelected = selectedIds.contains(id)
                         ListItem(
                             headlineContent = { Text(name) },

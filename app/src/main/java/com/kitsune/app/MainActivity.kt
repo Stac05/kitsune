@@ -89,6 +89,9 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         
+        // UNIFICATION: Use singleton ReaderRepository from Application
+        readerRepository = (application as KitsuneApplication).readerRepository
+        
         val database = AppDatabase.getDatabase(this)
         settingsRepository = SettingsRepository(database.settingsDao())
         storageHelper = StorageHelper(this)
@@ -97,9 +100,6 @@ class MainActivity : ComponentActivity() {
         progressRepository = ReadingProgressRepository(database.readingProgressDao(), database.comicDao())
         bookmarkRepository = BookmarkRepository(database.bookmarkDao())
         playlistRepository = PlaylistRepository(database.playlistDao())
-        
-        val cbzParser = CbzParser(this)
-        readerRepository = ReaderRepository(cbzParser)
         
         val splashViewModelInstance = SplashViewModel(settingsRepository, storageHelper)
         

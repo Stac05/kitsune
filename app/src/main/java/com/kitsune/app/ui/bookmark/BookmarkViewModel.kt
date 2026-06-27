@@ -10,6 +10,7 @@ import com.kitsune.app.domain.model.Comic
 import com.kitsune.app.database.entity.BookmarkEntity
 import com.kitsune.app.ui.library.ComicStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -26,8 +27,13 @@ class BookmarkViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    private val _selectedCategoryId = MutableStateFlow<Long?>(null)
-    val selectedCategoryId: StateFlow<Long?> = _selectedCategoryId.asStateFlow()
+    /**
+     * Optimasi pencarian untuk mencegah recomputation berlebih saat user mengetik.
+     */
+    @OptIn(FlowPreview::class)
+    private val debouncedSearchQuery = _searchQuery
+        .debounce(300)
+        .distinctUntilChanged()
 
     // Selection Mode State
     private val _selectedPaths = MutableStateFlow<Set<String>>(emptySet())
@@ -68,59 +74,71 @@ class BookmarkViewModel(
         .map { it.toSet() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
+    private val _selectedCategoryId = MutableStateFlow<Long?>(null)
+    val selectedCategoryId: StateFlow<Long?> = _selectedCategoryId.asStateFlow()
+
+    /**
+     * Tahap 1: Mendapatkan komik untuk kategori terpilih.
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val uiState: StateFlow<BookmarkUiState> = combine(
-        _selectedCategoryId.flatMapLatest { id ->
-            if (id == null) flowOf(emptyList())
-            else bookmarkRepository.getComicsInBookmark(id)
-        },
-        scannerRepository.allComics,
-        _searchQuery,
-        settingsRepository.settings,
-        bookmarkedPaths,
-        playlistPaths
-    ) { array ->
-        @Suppress("UNCHECKED_CAST")
-        val currentCategoryPaths = array[0] as List<String>
-        @Suppress("UNCHECKED_CAST")
-        val allComics = array[1] as List<Comic>
-        val query = array[2] as String
-        val settings = array[3] as com.kitsune.app.database.entity.SettingsEntity?
-        @Suppress("UNCHECKED_CAST")
-        val bookmarks = array[4] as Set<String>
-        @Suppress("UNCHECKED_CAST")
-        val playlists = array[5] as Set<String>
-
-        val gridSize = settings?.gridSize ?: 3
-        
-        if (_selectedCategoryId.value == null) {
-            return@combine BookmarkUiState.Empty
-        }
-
+    private val currentCategoryComics = _selectedCategoryId.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList())
+        else bookmarkRepository.getComicsInBookmark(id)
+    }.combine(scannerRepository.allComics) { categoryPaths, allComics ->
         val comicMap = allComics.associateBy { it.relativePath }
-        val comics = currentCategoryPaths.mapNotNull { comicMap[it] }
-        
-        val filteredComics = if (query.isBlank()) {
+        categoryPaths.mapNotNull { comicMap[it] }
+    }.distinctUntilChanged()
+
+    /**
+     * Tahap 2: Filtering komik berdasarkan search query.
+     */
+    private val filteredComics = combine(
+        currentCategoryComics,
+        debouncedSearchQuery
+    ) { comics, query ->
+        if (query.isBlank()) {
             comics
         } else {
             comics.filter { it.title.contains(query, ignoreCase = true) }
         }
+    }.distinctUntilChanged()
 
-        // Build status map
-        val statusMap = filteredComics.associate { comic ->
+    /**
+     * Tahap 3: Mapping Status Visual.
+     */
+    private val comicStatuses = combine(
+        filteredComics,
+        bookmarkedPaths,
+        playlistPaths
+    ) { comics, bookmarks, playlists ->
+        comics.associate { comic ->
             val path = comic.relativePath
             val statuses = mutableSetOf<ComicStatus>()
             if (bookmarks.contains(path)) statuses.add(ComicStatus.BOOKMARKED)
             if (playlists.contains(path)) statuses.add(ComicStatus.IN_PLAYLIST)
             path to statuses.toSet()
         }
+    }.distinctUntilChanged()
 
-        if (filteredComics.isEmpty()) {
+    /**
+     * Tahap 4: Perakitan Final UI State.
+     */
+    val uiState: StateFlow<BookmarkUiState> = combine(
+        filteredComics,
+        comicStatuses,
+        settingsRepository.settings,
+        _selectedCategoryId
+    ) { comics, statuses, settings, selectedId ->
+        val gridSize = settings?.gridSize ?: 3
+        
+        if (selectedId == null) {
+            BookmarkUiState.Empty
+        } else if (comics.isEmpty()) {
             BookmarkUiState.Empty
         } else {
             BookmarkUiState.Success(
-                comics = filteredComics,
-                comicStatuses = statusMap,
+                comics = comics,
+                comicStatuses = statuses,
                 gridSize = gridSize
             )
         }

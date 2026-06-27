@@ -62,6 +62,31 @@ fun ComicLibraryScreen(
         if (showPlaylistPicker) selectedPlaylistIds = emptySet()
     }
 
+    // OPTIMIZATION: Remember selection actions to prevent redundant re-allocation
+    val selectionActions = remember {
+        listOf(
+            SelectionAction(
+                icon = Icons.Default.BookmarkAdd,
+                label = "Add to Bookmark",
+                onClick = { showBookmarkPicker = true }
+            ),
+            SelectionAction(
+                icon = Icons.AutoMirrored.Filled.List,
+                label = "Add to Playlist",
+                onClick = { showPlaylistPicker = true }
+            )
+        )
+    }
+
+    // OPTIMIZATION: Stable handlers for SearchTopAppBar
+    val onSearchQueryChange = remember(viewModel) { { query: String -> viewModel.onSearchQueryChange(query) } }
+    val onCloseSearch = remember(viewModel) {
+        {
+            isSearchActive = false
+            viewModel.onSearchQueryChange("")
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
@@ -70,27 +95,13 @@ fun ComicLibraryScreen(
                     selectedCount = selectedPaths.size,
                     onCancel = { viewModel.clearSelection() },
                     onSelectAll = { viewModel.selectAll() },
-                    actions = listOf(
-                        SelectionAction(
-                            icon = Icons.Default.BookmarkAdd,
-                            label = "Add to Bookmark",
-                            onClick = { showBookmarkPicker = true }
-                        ),
-                        SelectionAction(
-                            icon = Icons.AutoMirrored.Filled.List,
-                            label = "Add to Playlist",
-                            onClick = { showPlaylistPicker = true }
-                        )
-                    )
+                    actions = selectionActions
                 )
             } else if (isSearchActive) {
                 SearchTopAppBar(
                     query = searchQuery,
-                    onQueryChange = { viewModel.onSearchQueryChange(it) },
-                    onCloseClick = {
-                        isSearchActive = false
-                        viewModel.onSearchQueryChange("")
-                    }
+                    onQueryChange = onSearchQueryChange,
+                    onCloseClick = onCloseSearch
                 )
             } else {
                 TopAppBar(
@@ -161,9 +172,11 @@ fun ComicLibraryScreen(
 
     // Generic Collection Pickers
     if (showBookmarkPicker) {
+        // OPTIMIZATION: Remember mapped collections
+        val bookmarkCollections = remember(allBookmarks) { allBookmarks.map { it.id to it.name } }
         CollectionPickerDialog(
             title = "Add to Bookmark",
-            collections = allBookmarks.map { it.id to it.name },
+            collections = bookmarkCollections,
             selectedIds = selectedBookmarkIds,
             onSelectionChanged = { selectedBookmarkIds = it },
             onConfirm = {
@@ -176,9 +189,11 @@ fun ComicLibraryScreen(
     }
 
     if (showPlaylistPicker) {
+        // OPTIMIZATION: Remember mapped collections
+        val playlistCollections = remember(allPlaylists) { allPlaylists.map { it.id to it.name } }
         CollectionPickerDialog(
             title = "Add to Playlist",
-            collections = allPlaylists.map { it.id to it.name },
+            collections = playlistCollections,
             selectedIds = selectedPlaylistIds,
             onSelectionChanged = { selectedPlaylistIds = it },
             onConfirm = {

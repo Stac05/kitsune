@@ -9,7 +9,8 @@ import com.kitsune.app.reader.CbzParser
 
 class KitsuneApplication : Application(), ImageLoaderFactory {
 
-    private lateinit var readerRepository: ReaderRepository
+    lateinit var readerRepository: ReaderRepository
+        private set
 
     override fun onCreate() {
         super.onCreate()
