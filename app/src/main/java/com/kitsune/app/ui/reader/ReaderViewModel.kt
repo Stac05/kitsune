@@ -14,6 +14,14 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 /**
+ * State untuk transisi antar chapter agar tidak terjadi blank screen.
+ */
+data class ChapterTransitionState(
+    val chapterTitle: String = "",
+    val isTransitioning: Boolean = false
+)
+
+/**
  * ViewModel untuk mengelola logika layar Reader.
  * Mendukung pembacaan progres per chapter, pemantauan pengaturan mode baca, dan navigasi antar chapter.
  */
@@ -29,6 +37,9 @@ class ReaderViewModel(
 
     private val _uiState = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
+
+    private val _transitionState = MutableStateFlow(ChapterTransitionState())
+    val transitionState: StateFlow<ChapterTransitionState> = _transitionState.asStateFlow()
 
     private var _chapterUri = MutableStateFlow<Uri?>(null)
     val chapterUri: StateFlow<Uri?> = _chapterUri.asStateFlow()
@@ -46,7 +57,20 @@ class ReaderViewModel(
 
     private fun loadChapter(chapterPath: String) {
         viewModelScope.launch {
-            _uiState.value = ReaderUiState.Loading
+            val isInitialLoad = _uiState.value !is ReaderUiState.Success
+            
+            // Bersihkan nama chapter untuk transition overlay
+            val targetChapterName = chapterPath.substringAfterLast('/').removeSuffix(".cbz")
+            
+            if (isInitialLoad) {
+                _uiState.value = ReaderUiState.Loading
+            } else {
+                _transitionState.value = ChapterTransitionState(
+                    chapterTitle = targetChapterName,
+                    isTransitioning = true
+                )
+            }
+
             try {
                 val settings = settingsRepository.settings.first()
                 val rootUriString = settings?.rootFolderUri
@@ -59,7 +83,6 @@ class ReaderViewModel(
 
                 val rootUri = rootUriString.toUri()
                 
-                // Load chapters list if not already loaded
                 if (chapters.isEmpty()) {
                     chapters = scannerRepository.getChapters(rootUri, comicRelativePath)
                 }
@@ -69,13 +92,13 @@ class ReaderViewModel(
 
                 if (chapterDoc == null || !chapterDoc.exists()) {
                     _uiState.value = ReaderUiState.Error("Chapter file not found")
+                    _transitionState.value = ChapterTransitionState(isTransitioning = false)
                     return@launch
                 }
 
                 val uri = chapterDoc.uri
                 _chapterUri.value = uri
                 
-                // OPTIMIZATION: Gunakan cacheKey (path + lastModified) untuk menghindari parsing ulang ZIP
                 val cacheKey = "${chapterPath}:${chapterDoc.lastModified()}"
                 val pages = readerRepository.getPages(uri, cacheKey)
                 
@@ -83,32 +106,25 @@ class ReaderViewModel(
                     _uiState.value = ReaderUiState.Empty
                 } else {
                     currentChapterPath = chapterPath
-                    
-                    // REVISION: Ambil progres spesifik untuk chapter ini
                     val savedProgress = progressRepository.getProgressByChapterSync(chapterPath)
                     val startPage = savedProgress?.pageNumber?.coerceIn(1, pages.size) ?: 1
                     
                     _currentPage.value = startPage
 
-                    // Remove .cbz extension (case-insensitive)
-                    val rawName = chapterPath.substringAfterLast('/')
-                    val cleanName = if (rawName.endsWith(".cbz", ignoreCase = true)) {
-                        rawName.dropLast(4)
-                    } else {
-                        rawName
-                    }
-
                     _uiState.value = ReaderUiState.Success(
                         pages = pages,
-                        chapterName = cleanName,
+                        chapterName = targetChapterName,
                         readingMode = readingMode
                     )
                     
-                    // Simpan/Update lastReadAt agar Continue Reading mengarah ke sini
                     saveProgress(startPage, pages.size)
                 }
             } catch (e: Exception) {
-                _uiState.value = ReaderUiState.Error("Failed to load chapter: ${e.message}")
+                if (isInitialLoad) {
+                    _uiState.value = ReaderUiState.Error("Failed to load chapter: ${e.message}")
+                }
+            } finally {
+                _transitionState.value = ChapterTransitionState(isTransitioning = false)
             }
         }
     }

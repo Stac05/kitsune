@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -43,6 +44,7 @@ fun ReaderScreen(
     onBackClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val transitionState by viewModel.transitionState.collectAsState()
     val chapterUri by viewModel.chapterUri.collectAsState()
     val currentPage by viewModel.currentPage.collectAsState()
     
@@ -124,6 +126,53 @@ fun ReaderScreen(
                                     hasNext = viewModel.hasNextChapter()
                                 )
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // REVISION 2: Chapter Transition Overlay
+        AnimatedVisibility(
+            visible = transitionState.isTransitioning,
+            enter = fadeIn() + scaleIn(initialScale = 0.9f),
+            exit = fadeOut() + scaleOut(targetScale = 1.1f),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+                    ),
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = transitionState.chapterTitle,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Loading chapter...",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     }
                 }
@@ -217,22 +266,6 @@ fun VerticalReader(
                     onPageChange(it)
                 }
             }
-    }
-
-    // Auto Chapter Transition
-    val isAtEnd = remember {
-        derivedStateOf {
-            val layoutInfo = listState.layoutInfo
-            if (layoutInfo.visibleItemsInfo.isEmpty()) return@derivedStateOf false
-            val lastVisibleItem = layoutInfo.visibleItemsInfo.last()
-            lastVisibleItem.index >= state.pages.size - 1 && hasNext
-        }
-    }
-
-    LaunchedEffect(isAtEnd.value) {
-        if (isAtEnd.value) {
-            // Kita bisa tambahkan delay atau interaksi user di sini di masa depan
-        }
     }
 
     LazyColumn(
