@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -32,8 +34,6 @@ import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.navigation.Screen
 import com.kitsune.app.reader.CbzParser
 import com.kitsune.app.scanner.ComicScanner
-import com.kitsune.app.ui.bookmark.BookmarkDetailScreen
-import com.kitsune.app.ui.bookmark.BookmarkDetailViewModel
 import com.kitsune.app.ui.bookmark.BookmarkScreen
 import com.kitsune.app.ui.bookmark.BookmarkViewModel
 import com.kitsune.app.ui.comicdetail.ComicDetailScreen
@@ -42,8 +42,6 @@ import com.kitsune.app.ui.library.ComicLibraryScreen
 import com.kitsune.app.ui.library.LibraryViewModel
 import com.kitsune.app.ui.local.LocalScreen
 import com.kitsune.app.ui.local.LocalViewModel
-import com.kitsune.app.ui.playlist.PlaylistDetailScreen
-import com.kitsune.app.ui.playlist.PlaylistDetailViewModel
 import com.kitsune.app.ui.playlist.PlaylistScreen
 import com.kitsune.app.ui.playlist.PlaylistViewModel
 import com.kitsune.app.ui.reader.ReaderScreen
@@ -52,6 +50,30 @@ import com.kitsune.app.ui.settings.OtherScreen
 import com.kitsune.app.ui.settings.SettingsViewModel
 import com.kitsune.app.ui.splash.SplashScreen
 import com.kitsune.app.ui.splash.SplashViewModel
+
+data class BottomNavItem(val label: String, val route: String, val icon: ImageVector)
+
+@Composable
+fun KitsuneTheme(
+    isOled: Boolean = false,
+    content: @Composable () -> Unit
+) {
+    val backgroundColor = if (isOled) Color.Black else Color(0xFF121212)
+    val surfaceColor = if (isOled) Color.Black else Color(0xFF1E1E1E)
+    
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = Color(0xFFFF9800), // Orange Accent
+            background = backgroundColor,
+            surface = surfaceColor,
+            onBackground = Color.White,
+            onSurface = Color.White,
+            primaryContainer = Color(0xFFFF9800).copy(alpha = 0.2f),
+            onPrimaryContainer = Color(0xFFFF9800)
+        ),
+        content = content
+    )
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -64,12 +86,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var storageHelper: StorageHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Install Splash Screen
         installSplashScreen()
-
         super.onCreate(savedInstanceState)
         
-        // Manual DI
         val database = AppDatabase.getDatabase(this)
         settingsRepository = SettingsRepository(database.settingsDao())
         storageHelper = StorageHelper(this)
@@ -83,7 +102,14 @@ class MainActivity : ComponentActivity() {
         readerRepository = ReaderRepository(cbzParser)
         
         val splashViewModelInstance = SplashViewModel(settingsRepository, storageHelper)
-        val libraryViewModelInstance = LibraryViewModel(scannerRepository, settingsRepository)
+        
+        // LibraryViewModel requires bookmark and playlist for bulk operations and status indicators
+        val libraryViewModelInstance = LibraryViewModel(
+            scannerRepository, 
+            settingsRepository, 
+            bookmarkRepository,
+            playlistRepository
+        )
 
         enableEdgeToEdge()
         setContent {
@@ -180,32 +206,57 @@ fun MainContainer(
             )
         ) {
             composable(Screen.Bookmark.route) { 
-                val bookmarkViewModel: BookmarkViewModel = viewModel {
-                    BookmarkViewModel(bookmarkRepository, settingsRepository)
-                }
+                val bookmarkViewModel: BookmarkViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return BookmarkViewModel(
+                                bookmarkRepository, 
+                                scannerRepository, 
+                                settingsRepository,
+                                playlistRepository
+                            ) as T
+                        }
+                    }
+                )
                 BookmarkScreen(
                     viewModel = bookmarkViewModel,
-                    onBookmarkClick = { item: BookmarkWithCount ->
-                        navController.navigate(Screen.BookmarkDetail.createRoute(item.bookmark.id))
+                    onComicClick = { comic ->
+                        navController.navigate(Screen.ComicDetail.createRoute(comic.relativePath))
                     }
                 ) 
             }
             composable(Screen.Playlist.route) { 
-                val playlistViewModel: PlaylistViewModel = viewModel {
-                    PlaylistViewModel(playlistRepository, settingsRepository)
-                }
+                val playlistViewModel: PlaylistViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return PlaylistViewModel(
+                                playlistRepository, 
+                                scannerRepository, 
+                                settingsRepository,
+                                bookmarkRepository
+                            ) as T
+                        }
+                    }
+                )
                 PlaylistScreen(
                     viewModel = playlistViewModel,
-                    onPlaylistClick = { item: PlaylistWithCount ->
-                        navController.navigate(Screen.PlaylistDetail.createRoute(item.playlist.id))
+                    onComicClick = { comic ->
+                        navController.navigate(Screen.ComicDetail.createRoute(comic.relativePath))
                     }
                 ) 
             }
             
             composable(Screen.Local.route) { 
-                val localViewModel: LocalViewModel = viewModel {
-                    LocalViewModel(progressRepository)
-                }
+                val localViewModel = viewModel<LocalViewModel>(
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return LocalViewModel(progressRepository) as T
+                        }
+                    }
+                )
                 LocalScreen(
                     viewModel = localViewModel,
                     onContinueReading = { lastRead ->
@@ -221,14 +272,19 @@ fun MainContainer(
                 ) 
             }
             composable(Screen.Other.route) { 
-                val settingsViewModel: SettingsViewModel = viewModel {
-                    SettingsViewModel(
-                        settingsRepository, 
-                        scannerRepository, 
-                        bookmarkRepository, 
-                        playlistRepository
-                    ) 
-                }
+                val settingsViewModel = viewModel<SettingsViewModel>(
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return SettingsViewModel(
+                                settingsRepository, 
+                                scannerRepository, 
+                                bookmarkRepository, 
+                                playlistRepository
+                            ) as T
+                        }
+                    }
+                )
                 OtherScreen(viewModel = settingsViewModel, storageHelper = storageHelper)
             }
             
@@ -249,8 +305,9 @@ fun MainContainer(
                 val comicRelativePath = backStackEntry.arguments?.getString("comicRelativePath") ?: ""
                 val comicDetailViewModel: ComicDetailViewModel = viewModel(
                     key = comicRelativePath,
-                    factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
                             return ComicDetailViewModel(
                                 comicRelativePath = comicRelativePath,
                                 scannerRepository = scannerRepository,
@@ -286,8 +343,9 @@ fun MainContainer(
                 
                 val readerViewModel: ReaderViewModel = viewModel(
                     key = chapterRelativePath,
-                    factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
                             return ReaderViewModel(
                                 comicRelativePath = comicRelativePath,
                                 currentChapterPath = chapterRelativePath,
@@ -306,84 +364,6 @@ fun MainContainer(
                     onBackClick = { navController.popBackStack() }
                 )
             }
-
-            composable(
-                route = Screen.BookmarkDetail.route,
-                arguments = listOf(navArgument("bookmarkId") { type = NavType.LongType })
-            ) { backStackEntry ->
-                val bookmarkId = backStackEntry.arguments?.getLong("bookmarkId") ?: 0L
-                val bookmarkDetailViewModel: BookmarkDetailViewModel = viewModel(
-                    key = bookmarkId.toString(),
-                    factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                            return BookmarkDetailViewModel(
-                                bookmarkId = bookmarkId,
-                                bookmarkRepository = bookmarkRepository,
-                                scannerRepository = scannerRepository,
-                                settingsRepository = settingsRepository
-                            ) as T
-                        }
-                    }
-                )
-                BookmarkDetailScreen(
-                    viewModel = bookmarkDetailViewModel,
-                    onComicClick = { comic ->
-                        navController.navigate(Screen.ComicDetail.createRoute(comic.relativePath))
-                    },
-                    onBackClick = { navController.popBackStack() }
-                )
-            }
-
-            composable(
-                route = Screen.PlaylistDetail.route,
-                arguments = listOf(navArgument("playlistId") { type = NavType.LongType })
-            ) { backStackEntry ->
-                val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: 0L
-                val playlistDetailViewModel: PlaylistDetailViewModel = viewModel(
-                    key = playlistId.toString(),
-                    factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                            return PlaylistDetailViewModel(
-                                playlistId = playlistId,
-                                playlistRepository = playlistRepository,
-                                scannerRepository = scannerRepository,
-                                settingsRepository = settingsRepository
-                            ) as T
-                        }
-                    }
-                )
-                PlaylistDetailScreen(
-                    viewModel = playlistDetailViewModel,
-                    onComicClick = { comic ->
-                        navController.navigate(Screen.ComicDetail.createRoute(comic.relativePath))
-                    },
-                    onBackClick = { navController.popBackStack() }
-                )
-            }
         }
     }
-}
-
-data class BottomNavItem(val label: String, val route: String, val icon: ImageVector)
-
-@Composable
-fun KitsuneTheme(
-    isOled: Boolean = false,
-    content: @Composable () -> Unit
-) {
-    val backgroundColor = if (isOled) Color.Black else Color(0xFF121212)
-    val surfaceColor = if (isOled) Color.Black else Color(0xFF1E1E1E)
-    
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Color(0xFFFF9800), // Orange Accent
-            background = backgroundColor,
-            surface = surfaceColor,
-            onBackground = Color.White,
-            onSurface = Color.White,
-            primaryContainer = Color(0xFFFF9800).copy(alpha = 0.2f),
-            onPrimaryContainer = Color(0xFFFF9800)
-        ),
-        content = content
-    )
 }

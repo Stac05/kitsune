@@ -38,6 +38,13 @@ class PlaylistRepository(private val playlistDao: PlaylistDao) {
         return playlistDao.getComicsInPlaylist(playlistId)
     }
 
+    /**
+     * Mendapatkan seluruh jalur relatif komik yang ada di kategori playlist manapun.
+     */
+    fun getAllPlaylistComics(): Flow<List<String>> {
+        return playlistDao.getAllPlaylistComics()
+    }
+
     suspend fun createPlaylist(name: String): Long {
         return playlistDao.insertPlaylist(PlaylistEntity(name = name))
     }
@@ -66,6 +73,29 @@ class PlaylistRepository(private val playlistDao: PlaylistDao) {
                 position = maxPos + 1
             )
         )
+    }
+
+    /**
+     * REVISION 5.2: Menambahkan banyak komik ke banyak playlist sekaligus secara batch.
+     */
+    suspend fun addComicsToPlaylists(playlistIds: List<Long>, comicPaths: List<String>) {
+        val entities = mutableListOf<PlaylistComicEntity>()
+        playlistIds.forEach { playlistId ->
+            val maxPos = playlistDao.getMaxPosition(playlistId) ?: -1
+            var currentPos = maxPos + 1
+            comicPaths.forEach { path ->
+                entities.add(
+                    PlaylistComicEntity(
+                        playlistId = playlistId,
+                        comicRelativePath = path,
+                        position = currentPos++
+                    )
+                )
+            }
+        }
+        if (entities.isNotEmpty()) {
+            playlistDao.addComicsToPlaylists(entities)
+        }
     }
 
     suspend fun removeComicFromPlaylist(playlistId: Long, comicPath: String) {

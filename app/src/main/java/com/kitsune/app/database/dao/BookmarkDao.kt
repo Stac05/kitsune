@@ -31,6 +31,13 @@ interface BookmarkDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun addComicToBookmark(bookmarkComic: BookmarkComicEntity)
 
+    /**
+     * Menambahkan banyak komik ke banyak bookmark sekaligus.
+     * Menggunakan IGNORE untuk mencegah duplikasi.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun addComicsToBookmarks(entities: List<BookmarkComicEntity>)
+
     @Query("DELETE FROM bookmark_comics WHERE bookmarkId = :bookmarkId AND comicRelativePath = :comicPath")
     suspend fun removeComicFromBookmark(bookmarkId: Long, comicPath: String)
 
@@ -39,6 +46,9 @@ interface BookmarkDao {
 
     @Query("SELECT comicRelativePath FROM bookmark_comics WHERE bookmarkId = :bookmarkId ORDER BY createdAt DESC")
     fun getComicsInBookmark(bookmarkId: Long): Flow<List<String>>
+
+    @Query("SELECT DISTINCT comicRelativePath FROM bookmark_comics ORDER BY createdAt DESC")
+    fun getAllBookmarkedComics(): Flow<List<String>>
 
     @Query("SELECT EXISTS(SELECT 1 FROM bookmark_comics WHERE bookmarkId = :bookmarkId AND comicRelativePath = :comicPath)")
     fun isComicInBookmark(bookmarkId: Long, comicPath: String): Flow<Boolean>

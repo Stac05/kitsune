@@ -38,6 +38,13 @@ class BookmarkRepository(private val bookmarkDao: BookmarkDao) {
         return bookmarkDao.getComicsInBookmark(bookmarkId)
     }
 
+    /**
+     * Mendapatkan seluruh jalur relatif komik yang ada di kategori bookmark manapun.
+     */
+    fun getAllBookmarkedComics(): Flow<List<String>> {
+        return bookmarkDao.getAllBookmarkedComics()
+    }
+
     suspend fun createBookmark(name: String): Long {
         return bookmarkDao.insertBookmark(BookmarkEntity(name = name))
     }
@@ -61,6 +68,20 @@ class BookmarkRepository(private val bookmarkDao: BookmarkDao) {
         bookmarkDao.addComicToBookmark(
             BookmarkComicEntity(bookmarkId = bookmarkId, comicRelativePath = comicPath)
         )
+    }
+
+    /**
+     * REVISION 5.2: Menambahkan banyak komik ke banyak bookmark sekaligus secara batch.
+     */
+    suspend fun addComicsToBookmarks(bookmarkIds: List<Long>, comicPaths: List<String>) {
+        val entities = bookmarkIds.flatMap { bookmarkId ->
+            comicPaths.map { path ->
+                BookmarkComicEntity(bookmarkId = bookmarkId, comicRelativePath = path)
+            }
+        }
+        if (entities.isNotEmpty()) {
+            bookmarkDao.addComicsToBookmarks(entities)
+        }
     }
 
     suspend fun removeComicFromBookmark(bookmarkId: Long, comicPath: String) {

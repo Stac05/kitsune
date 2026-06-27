@@ -1,16 +1,9 @@
 package com.kitsune.app.ui.library
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
@@ -18,11 +11,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.kitsune.app.domain.model.Comic
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,11 +25,65 @@ fun ComicLibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val selectionMode by viewModel.selectionMode.collectAsState()
+    val selectedPaths by viewModel.selectedPaths.collectAsState()
+    
+    val allBookmarks by viewModel.allBookmarks.collectAsState()
+    val allPlaylists by viewModel.allPlaylists.collectAsState()
+
     var isSearchActive by remember { mutableStateOf(false) }
+    
+    // Picker Visibility
+    var showBookmarkPicker by remember { mutableStateOf(false) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
+    
+    // Create Category Visibility
+    var showCreateBookmarkDialog by remember { mutableStateOf(false) }
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+
+    // Selection States for Dialogs
+    var selectedBookmarkIds by remember { mutableStateOf(setOf<Long>()) }
+    var selectedPlaylistIds by remember { mutableStateOf(setOf<Long>()) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        viewModel.snackbarMessage.collectLatest { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    // Reset picker selections when opening pickers
+    LaunchedEffect(showBookmarkPicker) {
+        if (showBookmarkPicker) selectedBookmarkIds = emptySet()
+    }
+    LaunchedEffect(showPlaylistPicker) {
+        if (showPlaylistPicker) selectedPlaylistIds = emptySet()
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
-            if (isSearchActive) {
+            if (selectionMode) {
+                SelectionTopAppBar(
+                    selectedCount = selectedPaths.size,
+                    onCancel = { viewModel.clearSelection() },
+                    onSelectAll = { viewModel.selectAll() },
+                    actions = listOf(
+                        SelectionAction(
+                            icon = Icons.Default.BookmarkAdd,
+                            label = "Add to Bookmark",
+                            onClick = { showBookmarkPicker = true }
+                        ),
+                        SelectionAction(
+                            icon = Icons.AutoMirrored.Filled.List,
+                            label = "Add to Playlist",
+                            onClick = { showPlaylistPicker = true }
+                        )
+                    )
+                )
+            } else if (isSearchActive) {
                 SearchTopAppBar(
                     query = searchQuery,
                     onQueryChange = { viewModel.onSearchQueryChange(it) },
@@ -47,12 +93,22 @@ fun ComicLibraryScreen(
                     }
                 )
             } else {
-                DefaultTopAppBar(
-                    onBackClick = onBackClick,
-                    onSearchClick = { isSearchActive = true }
+                TopAppBar(
+                    title = { Text("Comic Library") },
+                    actions = {
+                        IconButton(onClick = { isSearchActive = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black,
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White
+                    )
                 )
             }
-        }
+        },
+        containerColor = Color.Black
     ) { padding ->
         Box(
             modifier = Modifier
@@ -64,24 +120,10 @@ fun ComicLibraryScreen(
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
                 is LibraryUiState.Empty -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SearchOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        val message = if (searchQuery.isNotEmpty()) "No results for \"$searchQuery\"" else "No Comics Found"
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.Gray
-                        )
-                    }
+                    EmptyLibraryState(
+                        message = if (searchQuery.isNotEmpty()) "No results for \"$searchQuery\"" else "No Comics Found",
+                        icon = Icons.Default.SearchOff
+                    )
                 }
                 is LibraryUiState.Error -> {
                     Column(
@@ -89,6 +131,7 @@ fun ComicLibraryScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(text = state.message, color = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = { viewModel.refreshLibrary() }) {
                             Text("Retry")
                         }
@@ -98,130 +141,83 @@ fun ComicLibraryScreen(
                     ComicGrid(
                         comics = state.comics,
                         gridSize = state.gridSize,
-                        onComicClick = onComicClick
+                        comicStatuses = state.comicStatuses,
+                        selectedPaths = selectedPaths,
+                        onComicClick = { comic ->
+                            if (selectionMode) {
+                                viewModel.toggleSelection(comic.relativePath)
+                            } else {
+                                onComicClick(comic)
+                            }
+                        },
+                        onComicLongClick = { comic ->
+                            viewModel.toggleSelection(comic.relativePath)
+                        }
                     )
                 }
             }
         }
     }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DefaultTopAppBar(
-    onBackClick: () -> Unit,
-    onSearchClick: () -> Unit
-) {
-    TopAppBar(
-        title = { Text("Comic Library") },
-        navigationIcon = {
-            IconButton(onClick = onBackClick) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-        },
-        actions = {
-            IconButton(onClick = onSearchClick) {
-                Icon(Icons.Default.Search, contentDescription = "Search")
-            }
-        }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SearchTopAppBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onCloseClick: () -> Unit
-) {
-    TopAppBar(
-        title = {
-            TextField(
-                value = query,
-                onValueChange = onQueryChange,
-                placeholder = { Text("Search title...") },
-                modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
-                singleLine = true
-            )
-        },
-        navigationIcon = {
-            IconButton(onClick = onCloseClick) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-        },
-        actions = {
-            AnimatedVisibility(
-                visible = query.isNotEmpty(),
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(Icons.Default.Close, contentDescription = "Clear")
-                }
-            }
-        }
-    )
-}
-
-@Composable
-fun ComicGrid(
-    comics: List<Comic>,
-    gridSize: Int,
-    onComicClick: (Comic) -> Unit
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(gridSize),
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        items(comics) { comic ->
-            ComicCard(comic = comic, onClick = { onComicClick(comic) })
-        }
+    // Generic Collection Pickers
+    if (showBookmarkPicker) {
+        CollectionPickerDialog(
+            title = "Add to Bookmark",
+            collections = allBookmarks.map { it.id to it.name },
+            selectedIds = selectedBookmarkIds,
+            onSelectionChanged = { selectedBookmarkIds = it },
+            onConfirm = {
+                viewModel.addSelectedToBookmarks(selectedBookmarkIds.toList())
+                showBookmarkPicker = false
+            },
+            onDismiss = { showBookmarkPicker = false },
+            onCreateNew = { showCreateBookmarkDialog = true }
+        )
     }
-}
 
-@Composable
-fun ComicCard(
-    comic: Comic,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-    ) {
-        Column {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(5f / 7f),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                AsyncImage(
-                    model = comic.coverUri,
-                    contentDescription = "Cover for ${comic.title}",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-            Text(
-                text = comic.title,
-                modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+    if (showPlaylistPicker) {
+        CollectionPickerDialog(
+            title = "Add to Playlist",
+            collections = allPlaylists.map { it.id to it.name },
+            selectedIds = selectedPlaylistIds,
+            onSelectionChanged = { selectedPlaylistIds = it },
+            onConfirm = {
+                viewModel.addSelectedToPlaylists(selectedPlaylistIds.toList())
+                showPlaylistPicker = false
+            },
+            onDismiss = { showPlaylistPicker = false },
+            onCreateNew = { showCreatePlaylistDialog = true }
+        )
+    }
+
+    // Reusable Create Dialogs
+    if (showCreateBookmarkDialog) {
+        GenericCreateDialog(
+            title = "New Bookmark Category",
+            hint = "Category name",
+            onConfirm = { name ->
+                scope.launch {
+                    val newId = viewModel.createBookmark(name)
+                    selectedBookmarkIds = selectedBookmarkIds + newId
+                    showCreateBookmarkDialog = false
+                }
+            },
+            onDismiss = { showCreateBookmarkDialog = false }
+        )
+    }
+
+    if (showCreatePlaylistDialog) {
+        GenericCreateDialog(
+            title = "New Playlist",
+            hint = "Playlist name",
+            onConfirm = { name ->
+                scope.launch {
+                    val newId = viewModel.createPlaylist(name)
+                    selectedPlaylistIds = selectedPlaylistIds + newId
+                    showCreatePlaylistDialog = false
+                }
+            },
+            onDismiss = { showCreatePlaylistDialog = false }
+        )
     }
 }

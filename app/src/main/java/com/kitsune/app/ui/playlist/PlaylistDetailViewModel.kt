@@ -2,10 +2,12 @@ package com.kitsune.app.ui.playlist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kitsune.app.data.repository.BookmarkRepository
 import com.kitsune.app.data.repository.PlaylistRepository
 import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
 import com.kitsune.app.domain.model.Comic
+import com.kitsune.app.ui.library.ComicStatus
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -13,8 +15,12 @@ class PlaylistDetailViewModel(
     private val playlistId: Long,
     private val playlistRepository: PlaylistRepository,
     private val scannerRepository: ScannerRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val bookmarkRepository: BookmarkRepository
 ) : ViewModel() {
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _uiState = MutableStateFlow<PlaylistDetailUiState>(PlaylistDetailUiState.Loading)
     val uiState: StateFlow<PlaylistDetailUiState> = _uiState.asStateFlow()
@@ -42,22 +48,61 @@ class PlaylistDetailViewModel(
             combine(
                 playlistRepository.getComicsInPlaylist(playlistId),
                 scannerRepository.allComics,
-                settingsRepository.settings.map { it?.gridSize ?: 3 }
-            ) { playlistPaths, allComics, gridSize ->
-                val comicMap = allComics.associateBy { it.relativePath }
-                val sortedComics = playlistPaths.mapNotNull { comicMap[it] }
+                settingsRepository.settings,
+                _searchQuery,
+                bookmarkRepository.getAllBookmarkedComics(),
+                playlistRepository.getAllPlaylistComics()
+            ) { array ->
+                @Suppress("UNCHECKED_CAST")
+                val playlistPathsInThisCategory = array[0] as List<String>
+                @Suppress("UNCHECKED_CAST")
+                val allComics = array[1] as List<Comic>
+                val settings = array[2] as com.kitsune.app.database.entity.SettingsEntity?
+                val query = array[3] as String
+                @Suppress("UNCHECKED_CAST")
+                val allBookmarks = (array[4] as List<String>).toSet()
+                @Suppress("UNCHECKED_CAST")
+                val allPlaylists = (array[5] as List<String>).toSet()
 
-                PlaylistDetailUiState.Success(
-                    playlistName = playlist.name,
-                    comics = sortedComics,
-                    gridSize = gridSize
-                )
+                val gridSize = settings?.gridSize ?: 3
+                val comicMap = allComics.associateBy { it.relativePath }
+                val comics = playlistPathsInThisCategory.mapNotNull { comicMap[it] }
+                
+                val filteredComics = if (query.isBlank()) {
+                    comics
+                } else {
+                    comics.filter { it.title.contains(query, ignoreCase = true) }
+                }
+
+                // Build status map
+                val statusMap = filteredComics.associate { comic ->
+                    val path = comic.relativePath
+                    val statuses = mutableSetOf<ComicStatus>()
+                    if (allBookmarks.contains(path)) statuses.add(ComicStatus.BOOKMARKED)
+                    if (allPlaylists.contains(path)) statuses.add(ComicStatus.IN_PLAYLIST)
+                    path to statuses.toSet()
+                }
+
+                if (filteredComics.isEmpty()) {
+                    PlaylistDetailUiState.Empty(playlist.name)
+                } else {
+                    PlaylistDetailUiState.Success(
+                        playlistName = playlist.name,
+                        comics = filteredComics,
+                        comicStatuses = statusMap,
+                        gridSize = gridSize
+                    )
+                }
             }.catch { e ->
                 _uiState.value = PlaylistDetailUiState.Error(e.message ?: "Unknown error")
             }.collect { state ->
                 _uiState.value = state
             }
         }
+    }
+
+    fun onSearchQueryChange(newQuery: String) {
+        _searchQuery.value = newQuery
     }
 
     fun toggleSelection(path: String) {
@@ -96,12 +141,6 @@ class PlaylistDetailViewModel(
         }
     }
 
-    fun removeComic(comicPath: String) {
-        viewModelScope.launch {
-            playlistRepository.removeComicFromPlaylist(playlistId, comicPath)
-        }
-    }
-
     fun deletePlaylist() {
         viewModelScope.launch {
             playlistRepository.deletePlaylist(playlistId)
@@ -111,9 +150,11 @@ class PlaylistDetailViewModel(
 
 sealed class PlaylistDetailUiState {
     data object Loading : PlaylistDetailUiState()
+    data class Empty(val playlistName: String) : PlaylistDetailUiState()
     data class Success(
         val playlistName: String,
         val comics: List<Comic>,
+        val comicStatuses: Map<String, Set<ComicStatus>>,
         val gridSize: Int
     ) : PlaylistDetailUiState()
     data class Error(val message: String) : PlaylistDetailUiState()

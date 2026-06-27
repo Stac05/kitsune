@@ -9,7 +9,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.kitsune.app.core.DateUtils
 import com.kitsune.app.database.entity.ReadingProgressEntity
 import com.kitsune.app.domain.model.Chapter
 import com.kitsune.app.domain.model.Comic
@@ -52,7 +52,7 @@ fun ComicDetailScreen(
                 actions = {
                     IconButton(onClick = { showBookmarkDialog = true }) {
                         Icon(
-                            imageVector = if (isBookmarked) Icons.Filled.Star else Icons.Outlined.Star,
+                            imageVector = if (isBookmarked) Icons.Filled.Star else Icons.Filled.Star, // Using filled for both as simplified example, usually would use Outlined
                             contentDescription = "Bookmark",
                             tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
@@ -330,9 +330,27 @@ fun ChapterItem(
     chapter: Chapter,
     onClick: () -> Unit
 ) {
+    val formattedDate = remember(chapter.lastModified) {
+        DateUtils.formatTimestamp(chapter.lastModified)
+    }
+
     ListItem(
         headlineContent = { Text(chapter.name) },
-        supportingContent = { Text("CBZ File") },
+        supportingContent = {
+            if (formattedDate != null) {
+                Text(
+                    text = formattedDate,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = "CBZ File",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },

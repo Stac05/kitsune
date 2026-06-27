@@ -31,6 +31,13 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun addComicToPlaylist(playlistComic: PlaylistComicEntity)
 
+    /**
+     * Menambahkan banyak komik ke banyak playlist sekaligus.
+     * Menggunakan IGNORE untuk mencegah duplikasi.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun addComicsToPlaylists(entities: List<PlaylistComicEntity>)
+
     @Query("DELETE FROM playlist_comics WHERE playlistId = :playlistId AND comicRelativePath = :comicPath")
     suspend fun removeComicFromPlaylist(playlistId: Long, comicPath: String)
 
@@ -39,6 +46,9 @@ interface PlaylistDao {
 
     @Query("SELECT comicRelativePath FROM playlist_comics WHERE playlistId = :playlistId ORDER BY position ASC, createdAt DESC")
     fun getComicsInPlaylist(playlistId: Long): Flow<List<String>>
+
+    @Query("SELECT DISTINCT comicRelativePath FROM playlist_comics ORDER BY createdAt DESC")
+    fun getAllPlaylistComics(): Flow<List<String>>
 
     @Query("SELECT EXISTS(SELECT 1 FROM playlist_comics WHERE playlistId = :playlistId AND comicRelativePath = :comicPath)")
     fun isComicInPlaylist(playlistId: Long, comicPath: String): Flow<Boolean>

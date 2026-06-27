@@ -3,9 +3,11 @@ package com.kitsune.app.ui.bookmark
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kitsune.app.data.repository.BookmarkRepository
+import com.kitsune.app.data.repository.PlaylistRepository
 import com.kitsune.app.data.repository.ScannerRepository
 import com.kitsune.app.data.repository.SettingsRepository
 import com.kitsune.app.domain.model.Comic
+import com.kitsune.app.ui.library.ComicStatus
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -13,8 +15,12 @@ class BookmarkDetailViewModel(
     private val bookmarkId: Long,
     private val bookmarkRepository: BookmarkRepository,
     private val scannerRepository: ScannerRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val playlistRepository: PlaylistRepository
 ) : ViewModel() {
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _uiState = MutableStateFlow<BookmarkDetailUiState>(BookmarkDetailUiState.Loading)
     val uiState: StateFlow<BookmarkDetailUiState> = _uiState.asStateFlow()
@@ -42,20 +48,61 @@ class BookmarkDetailViewModel(
             combine(
                 bookmarkRepository.getComicsInBookmark(bookmarkId),
                 scannerRepository.allComics,
-                settingsRepository.settings.map { it?.gridSize ?: 3 }
-            ) { bookmarkedPaths, allComics, gridSize ->
-                val comics = allComics.filter { it.relativePath in bookmarkedPaths }
-                BookmarkDetailUiState.Success(
-                    bookmarkName = bookmark.name,
-                    comics = comics,
-                    gridSize = gridSize
-                )
+                settingsRepository.settings,
+                _searchQuery,
+                bookmarkRepository.getAllBookmarkedComics(),
+                playlistRepository.getAllPlaylistComics()
+            ) { array ->
+                @Suppress("UNCHECKED_CAST")
+                val bookmarkedInThisCategory = array[0] as List<String>
+                @Suppress("UNCHECKED_CAST")
+                val allComics = array[1] as List<Comic>
+                val settings = array[2] as com.kitsune.app.database.entity.SettingsEntity?
+                val query = array[3] as String
+                @Suppress("UNCHECKED_CAST")
+                val allBookmarks = (array[4] as List<String>).toSet()
+                @Suppress("UNCHECKED_CAST")
+                val allPlaylists = (array[5] as List<String>).toSet()
+
+                val gridSize = settings?.gridSize ?: 3
+                val comicMap = allComics.associateBy { it.relativePath }
+                val comics = bookmarkedInThisCategory.mapNotNull { comicMap[it] }
+                
+                val filteredComics = if (query.isBlank()) {
+                    comics
+                } else {
+                    comics.filter { it.title.contains(query, ignoreCase = true) }
+                }
+
+                // Build status map
+                val statusMap = filteredComics.associate { comic ->
+                    val path = comic.relativePath
+                    val statuses = mutableSetOf<ComicStatus>()
+                    if (allBookmarks.contains(path)) statuses.add(ComicStatus.BOOKMARKED)
+                    if (allPlaylists.contains(path)) statuses.add(ComicStatus.IN_PLAYLIST)
+                    path to statuses.toSet()
+                }
+
+                if (filteredComics.isEmpty()) {
+                    BookmarkDetailUiState.Empty(bookmark.name)
+                } else {
+                    BookmarkDetailUiState.Success(
+                        bookmarkName = bookmark.name,
+                        comics = filteredComics,
+                        comicStatuses = statusMap,
+                        gridSize = gridSize
+                    )
+                }
             }.catch { e ->
                 _uiState.value = BookmarkDetailUiState.Error(e.message ?: "Unknown error")
             }.collect { state ->
                 _uiState.value = state
             }
         }
+    }
+
+    fun onSearchQueryChange(newQuery: String) {
+        _searchQuery.value = newQuery
     }
 
     fun toggleSelection(path: String) {
@@ -94,12 +141,6 @@ class BookmarkDetailViewModel(
         }
     }
 
-    fun removeComic(comicPath: String) {
-        viewModelScope.launch {
-            bookmarkRepository.removeComicFromBookmark(bookmarkId, comicPath)
-        }
-    }
-
     fun deleteBookmark() {
         viewModelScope.launch {
             bookmarkRepository.deleteBookmark(bookmarkId)
@@ -109,9 +150,11 @@ class BookmarkDetailViewModel(
 
 sealed class BookmarkDetailUiState {
     data object Loading : BookmarkDetailUiState()
+    data class Empty(val bookmarkName: String) : BookmarkDetailUiState()
     data class Success(
         val bookmarkName: String,
         val comics: List<Comic>,
+        val comicStatuses: Map<String, Set<ComicStatus>>,
         val gridSize: Int
     ) : BookmarkDetailUiState()
     data class Error(val message: String) : BookmarkDetailUiState()
